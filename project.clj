@@ -22,4 +22,5 @@
                                        :output-dir    "test-target/public/js/out"
                                        :asset-path    "js/out"
                                        :optimizations :none}}]}
-  :deploy-via :clojars)
+  :lein-release {:deploy-via :clojars
+                 :scm        :git})
