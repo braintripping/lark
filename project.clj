@@ -1,4 +1,4 @@
-(defproject cells "0.1.1"
+(defproject cells "0.1.2-SNAPSHOT"
   :description "Interactive async in ClojureScript."
   :url "https://www.github.com/braintripping/cells"
   :license {:name "Mozilla Public License 2.0"
