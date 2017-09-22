@@ -91,6 +91,13 @@
          nil)
        (gobj/get KeyCodes)))
 
+(defn event-modifiers [e]
+  (cond-> #{}
+          (.-metaKey e) (conj (.-META KeyCodes))
+          (.-ctrlKey e) (conj (.-CTRL KeyCodes))
+          (.-shiftKey e) (conj (.-SHIFT KeyCodes))
+          (.-altKey e) (conj (.-ALT KeyCodes))))
+
 (defn M1-down? [e]
   (if mac? (.-metaKey e)
            (.-ctrlKey e)))

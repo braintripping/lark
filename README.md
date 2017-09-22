@@ -1,3 +1,3 @@
 # lark
 
-Open-source components for the [Lark Editor](https://www.lark.cloud).
+Open-source components of the [Lark Editor](https://www.lark.cloud).

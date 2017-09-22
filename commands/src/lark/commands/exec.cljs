@@ -1,12 +1,14 @@
 (ns lark.commands.exec
-  (:require [re-db.d :as d]
-            [goog.events :as events]
+  (:require [goog.events :as events]
             [lark.commands.registry :as registry]
             [clojure.set :as set]))
 
 (def debug? false)
 (def context (volatile! {}))
 (def last-selections (volatile! (list)))
+
+(def state (atom {:modifiers-down    #{}
+                  :which-key/active? false}))
 
 (defn set-context! [values]
   (vswap! context merge values))
@@ -82,21 +84,22 @@
 
 (def reverse-compare (fn [a b] (compare b a)))
 
+
+
 (defn init-listeners []
-  (let [clear-keys #(d/transact! [[:db/add :commands :modifiers-down #{}]
-                                  [:db/add :commands :which-key/active? false]])
-        clear-timeout! #(some-> (d/get :commands :which-key/timeout) (js/clearTimeout))
+  (let [clear-keys #(swap! state assoc :modifiers-down #{} :which-key/active? false)
+        clear-timeout! #(some-> (:which-key/timeout @state) (js/clearTimeout))
         clear-which-key! #(do (clear-timeout!)
-                              (d/transact! [[:db/add :commands :which-key/active? false]]))
+                              (swap! state assoc :which-key/active? false))
 
         which-key-delay 1500
         handle-keydown (fn [e]
                          (let [keycode (registry/normalize-keycode (.-keyCode e))
-                               {keys-down         :modifiers-down
-                                which-key-active? :which-key/active?} (d/entity :commands)
+                               {which-key-active? :which-key/active?} @state
                                modifier? (contains? registry/modifiers keycode)
-                               all-keys-down (conj keys-down keycode)
-                               command-names (seq (registry/get-keyset-commands all-keys-down))
+                               modifiers-down (registry/event-modifiers e)
+                               keys-down (conj modifiers-down keycode)
+                               command-names (seq (registry/get-keyset-commands keys-down))
                                context (when command-names
                                          (get-context {:keycode keycode
                                                        :key     (.-key e)}))
@@ -112,10 +115,11 @@
                                results (when the-commands
                                          (take 1 (filter identity (map #(exec-command context %) the-commands))))]
 
-                           (d/transact! [(when (and which-key-active? (= keycode 27))
-                                           [:db/add :commands :which-key/active? false])
-                                         (when the-commands
-                                           [:db/add :commands :last-exec-keys all-keys-down])])
+                           (reset! state (cond-> @state
+                                                 (and which-key-active? (= keycode 27))
+                                                 (assoc :which-key/active? false)
+                                                 the-commands
+                                                 (assoc :last-exec-keys keys-down)))
                            ;; if we use Tab as a modifier,
                            ;; we'll stop its default behaviour
                            #_(when (= 9 keycode)
@@ -129,17 +133,15 @@
 
                            (clear-timeout!)
 
-
-
                            (when modifier?
-                             (d/transact! [[:db/update-attr :commands :modifiers-down conj keycode]
-                                           [:db/add :commands :which-key/timeout
-                                            (js/setTimeout
-                                              #(let [keys-down (d/get :commands :modifiers-down)]
-                                                 (when (and (seq keys-down)
-                                                            (not= keys-down #{(registry/endkey->keycode "shift")}))
-                                                   (d/transact! [[:db/add :commands :which-key/active? true]])))
-                                              which-key-delay)]]))))]
+                             (swap! state assoc
+                                    :modifiers-down modifiers-down
+                                    :which-key/timeout (js/setTimeout
+                                                         #(let [keys-down (:modifiers-down @state)]
+                                                            (when (and (seq keys-down)
+                                                                       (not= keys-down #{(registry/endkey->keycode "shift")}))
+                                                              (swap! state assoc :which-key/active? true)))
+                                                         which-key-delay)))))]
 
     (clear-keys)
 
@@ -152,13 +154,14 @@
                    (fn [e]
                      (let [keycode (registry/normalize-keycode (.-keyCode e))]
                        (when (registry/modifiers keycode)
-                         (d/transact! [[:db/update-attr :commands :modifiers-down disj keycode]])
-                         (when (empty? (d/get :commands :modifiers-down))
-                           (d/transact! [[:db/add :commands :which-key/active? false]]))))) true)
+                         (let [modifiers-down (registry/event-modifiers e)]
+                           (reset! state
+                                   (cond-> (assoc @state :modifiers-down modifiers-down)
+                                           (empty? modifiers-down) (assoc :which-key/active? false))))))) true)
 
     (events/listen js/window "mousedown"
                    (fn [e]
-                     (doseq [command (-> (conj (d/get :commands :modifiers-down) (.-button e))
+                     (doseq [command (-> (conj (:modifiers-down @state) (.-button e))
                                          (registry/get-keyset-commands))]
                        (exec-command-name command))))
 
