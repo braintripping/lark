@@ -2,4 +2,4 @@ resources/public/js/compiled/out*
 target
 .idea
 **.iml
-**pom.xml
+**pom.xml**

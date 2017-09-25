@@ -79,8 +79,7 @@
 (defn contextual-commands
   [context]
   (->> (vals @registry/commands)
-       (sequence (comp (map #(apply-context context %))
-                       (filter :exec?)))))
+       (mapv #(apply-context context %))))
 
 (def reverse-compare (fn [a b] (compare b a)))
 
