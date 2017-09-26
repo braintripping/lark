@@ -28,7 +28,7 @@
   (invalidate! [this]))
 
 (defprotocol ICellView
-  "Protocol for shallow copies of cells with different views"
+  "Protocol for wrapping cells with different views (as metadata)"
   (view [this])
   (with-view [this view-fn]))
 
