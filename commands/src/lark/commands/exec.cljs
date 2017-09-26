@@ -83,13 +83,16 @@
 
 (def reverse-compare (fn [a b] (compare b a)))
 
+(defn clear-whichkey-timeout! []
+  (some-> (:which-key/timeout @state) (js/clearTimeout)))
 
+(defn clear-whichkey! []
+  (clear-whichkey-timeout!)
+  (swap! state assoc :which-key/active? false))
 
 (defn init-listeners []
   (let [clear-keys #(swap! state assoc :modifiers-down #{} :which-key/active? false)
-        clear-timeout! #(some-> (:which-key/timeout @state) (js/clearTimeout))
-        clear-which-key! #(do (clear-timeout!)
-                              (swap! state assoc :which-key/active? false))
+
 
         which-key-delay 1500
         handle-keydown (fn [e]
@@ -128,9 +131,9 @@
                            (when (seq (filter identity results))
                              (.stopPropagation e)
                              (.preventDefault e)
-                             (clear-which-key!))
+                             (clear-whichkey!))
 
-                           (clear-timeout!)
+                           (clear-whichkey-timeout!)
 
                            (when modifier?
                              (swap! state assoc

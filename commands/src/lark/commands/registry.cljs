@@ -119,7 +119,7 @@
                                  (endkey->keycode %)) keys)))))))
 
 (def code->symbol
-  (->> {(.-CTRL KeyCodes)                 "Ctrl" #_"⌃"
+  (->> {(.-CTRL KeyCodes)                 "⌃"
         (.-META KeyCodes)                 (if mac? "⌘" "Meta")
         (.-SHIFT KeyCodes)                #_"Shift"       "⇧"
         (.-ALT KeyCodes)                  (if mac? "⎇" "Alt")
