@@ -34,7 +34,7 @@
   unless a unique `key` is provided. Helper functions in `lib-bindings` (eg. interval) are
   hoisted into scope, as is `self`, which refers to the current cell."
   ([expr]
-   (cell nil expr))
+   `(~'cells.cell/cell nil ~expr))
   ([key expr]
    `(let ~lib-bindings
       (~'cells.cell/make-cell ~(cell-name key) (fn [~'self] ~expr)))))
