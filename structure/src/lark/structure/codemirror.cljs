@@ -59,16 +59,8 @@
                            (z/left loc)
                            (not (tree/whitespace? (z/node (z/left loc)))))
                     (z/left loc)
-                    loc))
-        up-tag (some-> the-loc
-                       (z/up)
-                       (z/node)
-                       (:tag))]
-    (cond-> the-loc
-            (#{:quote
-               :deref
-               :reader-conditional} up-tag)
-            (z/up))))
+                    loc))]
+    (tree/include-prefix-parents the-loc)))
 
 
 (defn set-cursor-root! [cm]

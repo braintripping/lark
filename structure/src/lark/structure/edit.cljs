@@ -70,10 +70,10 @@
 
 (defn transpose-bounds [bounds dir]
   (case dir :end->start
-            {:end-line (:line bounds)
+            {:end-line   (:line bounds)
              :end-column (:column bounds)}
             :start->end
-            {:line (:end-line bounds)
+            {:line   (:end-line bounds)
              :column (:end-column bounds)}))
 
 (defprotocol IPointer
@@ -136,29 +136,39 @@
   ([editor] (pointer editor (cm/get-cursor editor)))
   ([editor pos] (->Pointer editor pos)))
 
+(defn loc-splice [loc items]
+  (let [loc (reduce (fn [loc item]
+                      (z/insert-left loc item)) loc items)]
+    (z/remove loc)))
+
+(defn closest-left [pred loc]
+  (when loc
+    (if (pred (z/node loc))
+      loc
+      (some->> (z/left loc)
+               (recur pred)))))
+
 (defn uneval! [{:keys [zipper] :as cm}]
-  (let [selection-bounds (cm/current-selection-bounds cm)
-        loc (tree/node-at zipper (tree/bounds selection-bounds :left))
-        node (z/node loc)
-        replace! (fn [original-loc replacement-node]
-                   (let [loc (z/replace original-loc replacement-node)
-                         string (tree/string (z/node loc))]
-                     (cm/replace-range! cm string (z/node original-loc)))
-                   true)]
-    ;; TODO
-    ;; after executing a command, the cursor/bracket locs do not update.
-    (when loc
-      (let [pointer (pointer cm)
-            changes (operation cm
-                               (or (and (= :uneval (:tag node))
-                                        (replace! loc (first (:value node)))
-                                        true)
-                                   (and (= :uneval (some-> (z/up loc) (z/node) :tag))
-                                        (replace! (z/up loc) (first (:value (z/node (z/up loc))))))
-                                   (replace! loc {:tag   :uneval
-                                                  :value [node]})))]
-        (adjust-for-changes! pointer changes)
-        (set-editor-cursor! pointer))))
+  (let [selection-bounds (cm/current-selection-bounds cm)]
+    (when-let [loc (->> (tree/node-at zipper (tree/bounds selection-bounds :left))
+                        (cm/cursor-loc (:pos (:magic/cursor cm)))
+                        (closest-left (complement tree/whitespace?)))]
+      (let [node (z/node loc)
+            replace! (fn [target-loc items uneval?]
+                       (let [string (tree/string {:tag   (if uneval? :uneval :base)
+                                                  :value items})]
+                         (cm/replace-range! cm string (z/node target-loc)))
+                       true)]
+        (let [pointer (pointer cm)
+              changes (operation cm
+                                 (or (and (= :uneval (:tag node))
+                                          (replace! loc (:value node) false)
+                                          true)
+                                     (and (= :uneval (some-> (z/up loc) (z/node) :tag))
+                                          (replace! (z/up loc) (:value (z/node (z/up loc))) false))
+                                     (replace! loc [node] true)))]
+          (adjust-for-changes! pointer changes)
+          (set-editor-cursor! pointer)))))
   true)
 
 
@@ -382,8 +392,8 @@
           end-edge-node (some-> end-edge-loc z/node)]
       (when (and end-edge-node (not= :base (:tag end-edge-node)))
         (let [inner-forms (some->> (z/children end-edge-loc)
-                                            (filter tree/sexp?)
-                                            (reverse))]
+                                   (filter tree/sexp?)
+                                   (reverse))]
           (when-let [last-inner-form (first inner-forms)]
             (operation cm (let [right-bracket (second (tree/edges end-edge-node))
                                 range (merge (or (some-> (second inner-forms)
