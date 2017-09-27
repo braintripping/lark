@@ -183,19 +183,29 @@
 (defn- remove-binding [mappings name parsed-binding]
   (update-in mappings (conj parsed-binding :exec) seq-disj name))
 
-(defn bind! [name binding]
-  (let [parsed-binding (normalize-keyset-string binding)]
-    (swap! mappings add-binding name parsed-binding)
-    (reset! commands (-> @commands
-                         (update-in [name :bindings] (comp distinct conj) binding)
-                         (update-in [name :parsed-bindings] (comp distinct conj) parsed-binding)))))
+(defn bind!
+  "Takes a map of {<command-name>, <binding string>} and registers keybindings."
+  [bindings]
+  (let [[mappings* commands*] (reduce (fn [[mappings commands] [the-name binding]]
+                                        (let [parsed-binding (normalize-keyset-string binding)]
+                                          [(add-binding mappings the-name parsed-binding)
+                                           (-> commands
+                                               (update-in [the-name :bindings] (comp distinct conj) binding)
+                                               (update-in [the-name :parsed-bindings] (comp distinct conj) parsed-binding))])) [@mappings @commands] bindings)]
+    (reset! mappings mappings*)
+    (reset! commands commands*)))
 
-(defn unbind! [name binding]
-  (let [parsed-binding (normalize-keyset-string binding)]
-    (swap! mappings remove-binding name parsed-binding)
-    (reset! commands (-> @commands
-                         (update-in [name :bindings] seq-disj binding)
-                         (update-in [name :parsed-bindings] seq-disj parsed-binding)))))
+(defn unbind!
+  "Takes a map of {<command-name>, <binding string>} and removes keybindings."
+  [bindings]
+  (let [[mappings* commands*] (reduce (fn [[mappings commands] [the-name binding]]
+                                        (let [parsed-binding (normalize-keyset-string binding)]
+                                          [(remove-binding mappings the-name parsed-binding)
+                                           (-> commands
+                                               (update-in [the-name :bindings] seq-disj binding)
+                                               (update-in [the-name :parsed-bindings] seq-disj parsed-binding))])) [@mappings @commands] bindings)]
+    (reset! mappings mappings*)
+    (reset! commands commands*)))
 
 (defn register! [{the-name :name
                   priority :priority
