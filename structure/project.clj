@@ -10,7 +10,8 @@
   :dependencies [[fast-zip "0.7.0"]
                  [magic-tree "0.0.14-SNAPSHOT"]
                  [cljsjs/codemirror "5.19.0-0"]
-                 [lark/commands "0.1.1-SNAPSHOT"]]
+                 [lark/commands "0.1.1-SNAPSHOT"]
+                 [lark/editors "0.1.0-SNAPSHOT"]]
 
   :source-paths ["src"]
 
