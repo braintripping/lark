@@ -1,4 +1,4 @@
-(defproject lark/structure "0.1.0-SNAPSHOT"
+(defproject lark/structure "0.1.1-SNAPSHOT"
 
   :url "https://www.github.com/braintripping/lark/tree/master/structure"
 
@@ -9,7 +9,7 @@
 
   :dependencies [[fast-zip "0.7.0"]
                  [magic-tree "0.0.14-SNAPSHOT"]
-                 [cljsjs/codemirror "5.19.0-0"]
+                 [cljsjs/codemirror "5.24.0-1"]
                  [lark/commands "0.1.1-SNAPSHOT"]
                  [lark/editors "0.1.0-SNAPSHOT"]]
 

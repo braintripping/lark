@@ -1,6 +1,6 @@
 (defproject cells "0.1.3-SNAPSHOT"
   :description "Interactive async in ClojureScript."
-  :url "https://www.github.com/braintripping/cells"
+  :url "https://www.github.com/braintripping/lark/tree/master/cells"
   :license {:name "Mozilla Public License 2.0"
             :url  "https://www.mozilla.org/en-US/MPL/2.0/"}
 
