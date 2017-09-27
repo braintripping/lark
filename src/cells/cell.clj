@@ -7,14 +7,7 @@
           []
           '[cells.lib/interval
             cells.lib/timeout
-            cells.lib/fetch
-            cells.lib/geo-location
-            cells.lib/-on-frame]))
-
-#_(defn cell-bindings [cell-name]
-  (into lib-bindings
-        `[~'reset! (partial ~'cells.lib/restricted-reset! ~cell-name)
-          ~'swap! (partial ~'cells.lib/restricted-swap! ~cell-name)]))
+            cells.lib/fetch]))
 
 (defmacro defcell
   "Defines a named cell."
@@ -28,24 +21,27 @@
        (let ~lib-bindings
          (~'cells.cell/make-cell ~cell-name (fn [~'self] ~@body))))))
 
+(defn- cell-name
+  "Construct a cell-name, incorporating the runtime-value of `key` if provided."
+  [key]
+  (let [uuid (str "_" (util/unique-id))
+        namespace-segment (str *ns*)]
+    (if key `(keyword ~namespace-segment (str ~uuid "._" (hash ~key)))
+            (keyword namespace-segment uuid))))
+
 (defmacro cell
-  "Returns an anonymous cell."
-  [& body]
-  (let [named? (> (count body) 1)
-        the-name (when named? (first body))
-        body (if named? (rest body) body)
-        ;; unique ID for this lexical occurrence of `cell`
-        lexical-marker (str "_" (util/unique-id))
-        namespace-segment (str *ns*)
-        ;; if name value is provided, append its hash to this cell id
-        cell-name (if the-name `(keyword ~namespace-segment (str ~lexical-marker "._" (hash ~the-name)))
-                               (keyword namespace-segment lexical-marker))
-        ]
-    `(let ~lib-bindings
-       (~'cells.cell/make-cell ~cell-name (fn [~'self] ~@body)))))
+  "Returns an anonymous cell. Only one cell will be returned per lexical instance of `cell`,
+  unless a unique `key` is provided. Helper functions in `lib-bindings` (eg. interval) are
+  hoisted into scope, as is `self`, which refers to the current cell."
+  ([expr]
+   (cell nil expr))
+  ([key expr]
+   `(let ~lib-bindings
+      (~'cells.cell/make-cell ~(cell-name key) (fn [~'self] ~expr)))))
 
 (defmacro cell-fn
-  "Returns an anonymous function which will evaluate with the current cell in the stack"
+  "Returns an anonymous function which will evaluate with the current cell in the stack.
+  Similar to Clojure's `bound-fn`, but only cares about the currently bound cell."
   [& body]
   `(let [the-cell# (first ~'cells.cell/*cell-stack*)
          context# ~'cells.cell/*eval-context*]

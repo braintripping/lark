@@ -16,10 +16,25 @@
          fetch
          geo-location)
 
-(def status! cell/status!)
-(def status cell/status)
-(def message cell/message)
-(def error? cell/error?)
+(def status!
+
+  cell/status!)
+
+(def status
+  "Returns the cell's status (a keyword)"
+  cell/status)
+
+(def message
+  "Returns the cell's status message, if it exists."
+  cell/message)
+
+(def error?
+  "Returns true if cell's status is :error"
+  cell/error?)
+
+(def with-view
+  "Wraps a cell with a view (as metadata)"
+  cell/with-view)
 
 (defn loading?
   "Returns true if x has a status of :loading."

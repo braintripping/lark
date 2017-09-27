@@ -28,9 +28,9 @@
   (invalidate! [this]))
 
 (defprotocol ICellView
-  "Protocol for wrapping cells with different views (as metadata)"
+  "Cell views are attached as metadata & allow multiple (different) views on identical cells."
   (view [this])
-  (with-view [this view-fn]))
+  (with-view [this view-fn] "Wraps a cell with a view"))
 
 (defprotocol IRenderHiccup
   (render-hiccup [this]))
@@ -311,7 +311,8 @@
                        :dispose-fns   []})
 
 (defn make-cell
-  "Makes a new cell. Memoized by id."
+  "Makes a new cell.
+  Calling `make-cell` with the same ID more than once returns the same cell."
   ([f]
    (make-cell (keyword "cells.temp" (util/unique-id)) f))
   ([id f] (make-cell id f {:initial-value nil}))
