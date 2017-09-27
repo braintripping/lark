@@ -91,10 +91,9 @@
   (swap! state assoc :which-key/active? false))
 
 (defn init-listeners []
-  (let [clear-keys #(swap! state assoc :modifiers-down #{} :which-key/active? false)
-
-
-        which-key-delay 1500
+  (let [clear-keys #(swap! state assoc :modifiers-down #{}
+                           :which-key/active? false)
+        which-key-delay 1000
         handle-keydown (fn [e]
                          (let [keycode (registry/normalize-keycode (.-keyCode e))
                                {which-key-active? :which-key/active?} @state
@@ -117,7 +116,7 @@
                                results (when the-commands
                                          (take 1 (filter identity (map #(exec-command context %) the-commands))))]
 
-                           (reset! state (cond-> @state
+                           (reset! state (cond-> (assoc @state :modifiers-down modifiers-down)
                                                  (and which-key-active? (= keycode 27))
                                                  (assoc :which-key/active? false)
                                                  the-commands
@@ -137,7 +136,6 @@
 
                            (when modifier?
                              (swap! state assoc
-                                    :modifiers-down modifiers-down
                                     :which-key/timeout (js/setTimeout
                                                          #(let [keys-down (:modifiers-down @state)]
                                                             (when (and (seq keys-down)

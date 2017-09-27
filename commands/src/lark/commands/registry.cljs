@@ -119,38 +119,38 @@
                                  (endkey->keycode %)) keys)))))))
 
 (def code->symbol
-  (->> {(.-CTRL KeyCodes)                 "⌃"
-        (.-META KeyCodes)                 (if mac? "⌘" "Meta")
-        (.-SHIFT KeyCodes)                #_"Shift"       "⇧"
-        (.-ALT KeyCodes)                  (if mac? "⎇" "Alt")
-        (.-ENTER KeyCodes)                "Enter"             #_"⏎"
-        (.-BACKSPACE KeyCodes)            "⌫"
-        (.-LEFT KeyCodes)                 "←"
-        (.-TAB KeyCodes)                  "Tab" #_"⇥"
-        (.-RIGHT KeyCodes)                "→"
-        (.-UP KeyCodes)                   "↑"
-        (.-DOWN KeyCodes)                 "↓"
-        (.-HOME KeyCodes)                 "↖"
-        (.-END KeyCodes)                  "↘"
-        (.-OPEN_SQUARE_BRACKET KeyCodes)  "["
-        (.-CLOSE_SQUARE_BRACKET KeyCodes) "]"
-        (.-SLASH KeyCodes)                "/"
-        (.-BACKSLASH KeyCodes)            \\
-        (.-APOSTROPHE KeyCodes)           "'"
-        (.-COMMA KeyCodes)                ","
-        (.-PERIOD KeyCodes)               "."
-        (.-EQUALS KeyCodes)               "="
-        (.-PLUS_SIGN KeyCodes)            "+"
-        (.-DASH KeyCodes)                 "-"
-        (.-SEMICOLON KeyCodes)            ";"
-        (.-TILDE KeyCodes)                "`"
-        57                                "("
-        48                                ")"
-        219                               "{"
-        221                               "}"
-        0                                 mouse-icon
-        1                                 mouse-icon
-        2                                 mouse-icon}))
+  (->> {(.-CTRL KeyCodes)                           "⌃"
+        (.-META KeyCodes)                           (if mac? "⌘" "Meta")
+        (.-SHIFT KeyCodes)                #_"Shift" "⇧"
+        (.-ALT KeyCodes)                            (if mac? "⎇" "Alt")
+        (.-ENTER KeyCodes)                          "Enter"             #_"⏎"
+        (.-BACKSPACE KeyCodes)                      "⌫"
+        (.-LEFT KeyCodes)                           "←"
+        (.-TAB KeyCodes)                            "Tab" #_"⇥"
+        (.-RIGHT KeyCodes)                          "→"
+        (.-UP KeyCodes)                             "↑"
+        (.-DOWN KeyCodes)                           "↓"
+        (.-HOME KeyCodes)                           "↖"
+        (.-END KeyCodes)                            "↘"
+        (.-OPEN_SQUARE_BRACKET KeyCodes)            "["
+        (.-CLOSE_SQUARE_BRACKET KeyCodes)           "]"
+        (.-SLASH KeyCodes)                          "/"
+        (.-BACKSLASH KeyCodes)                      \\
+        (.-APOSTROPHE KeyCodes)                     "'"
+        (.-COMMA KeyCodes)                          ","
+        (.-PERIOD KeyCodes)                         "."
+        (.-EQUALS KeyCodes)                         "="
+        (.-PLUS_SIGN KeyCodes)                      "+"
+        (.-DASH KeyCodes)                           "-"
+        (.-SEMICOLON KeyCodes)                      ";"
+        (.-TILDE KeyCodes)                          "`"
+        57                                          "("
+        48                                          ")"
+        219                                         "{"
+        221                                         "}"
+        0                                           mouse-icon
+        1                                           mouse-icon
+        2                                           mouse-icon}))
 
 (def modifiers #{(.-META KeyCodes)
                  (.-CTRL KeyCodes)
@@ -172,10 +172,35 @@
 (defn spaced-name [the-name]
   (str (string/upper-case (first the-name)) (string/replace (subs the-name 1) "-" " ")))
 
+(defn seq-disj
+  "Removes `x` from `coll`"
+  [coll x]
+  (remove #(= % x) coll))
+
+(defn- add-binding [mappings name parsed-binding]
+  (update-in mappings (conj parsed-binding :exec) conj name))
+
+(defn- remove-binding [mappings name parsed-binding]
+  (update-in mappings (conj parsed-binding :exec) seq-disj name))
+
+(defn bind! [name binding]
+  (let [parsed-binding (normalize-keyset-string binding)]
+    (swap! mappings add-binding name parsed-binding)
+    (reset! commands (-> @commands
+                         (update-in [name :bindings] (comp distinct conj) binding)
+                         (update-in [name :parsed-bindings] (comp distinct conj) parsed-binding)))))
+
+(defn unbind! [name binding]
+  (let [parsed-binding (normalize-keyset-string binding)]
+    (swap! mappings remove-binding name parsed-binding)
+    (reset! commands (-> @commands
+                         (update-in [name :bindings] seq-disj binding)
+                         (update-in [name :parsed-bindings] seq-disj parsed-binding)))))
+
 (defn register! [{the-name :name
                   priority :priority
                   :as      the-command} bindings]
-  (let [parsed-bindings (mapv normalize-keyset-string bindings)]
+  (let [parsed-bindings (map normalize-keyset-string bindings)]
     (swap! commands assoc the-name (merge the-command
                                           {:display-namespace (some-> (namespace the-name)
                                                                       (spaced-name))
@@ -184,7 +209,8 @@
                                            :priority          (or priority 0)
                                            :parsed-bindings   parsed-bindings}))
     (reset! mappings (reduce (fn [mappings pattern]
-                               (update-in mappings (conj pattern :exec) conj the-name)) @mappings parsed-bindings))))
+                               (add-binding mappings the-name pattern)) @mappings parsed-bindings))))
+
 
 (defn deregister! [the-name]
   (let [{:keys [parsed-bindings]} (get @commands the-name)]

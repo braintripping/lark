@@ -177,13 +177,15 @@
               :right {:end-line   (or (.-line pos) 0)
                       :end-column (.-ch pos)})))
 
-(defn selection-bounds
+(defn selection-bounds [sel]
+  (merge (pos->boundary (.from sel) :left)
+         (pos->boundary (.to sel) :right)))
+
+(defn current-selection-bounds
   [cm]
   (if (.somethingSelected cm)
     (let [sel (first (.listSelections cm))]
-      (pos->boundary (.from sel))
-      (merge (pos->boundary (.from sel) :left)
-             (pos->boundary (.to sel) :right)))
+      (selection-bounds sel))
     (let [cur (get-cursor cm)]
       (pos->boundary cur))))
 
