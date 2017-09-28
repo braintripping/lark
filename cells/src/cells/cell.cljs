@@ -3,7 +3,7 @@
             [clojure.set :as set]
             [cells.util :as util]
             [cells.eval-context :as eval-context :refer [on-dispose dispose!]])
-  (:require-macros [cells.cell :refer [defcell cell cell-fn]]))
+  (:require-macros [cells.cell]))
 
 (def ^:dynamic *cell-stack* (list))
 (def ^:dynamic *computing-dependents* false)
@@ -314,7 +314,7 @@
   "Makes a new cell.
   Calling `make-cell` with the same ID more than once returns the same cell."
   ([f]
-   (make-cell (keyword "cells.temp" (util/unique-id)) f))
+   (make-cell (keyword "cells.temp" (str "_" (util/unique-id))) f))
   ([id f] (make-cell id f {:initial-value nil}))
   ([id f state]
    (or (get @-cells id)
@@ -324,6 +324,11 @@
          (vswap! -cells assoc id cell)
          (-set! cell (:initial-value state))
          (-compute-with-dependents! cell)))))
+
+(defn cell [key value]
+  (make-cell (keyword (str "cells." (or (some-> (first *cell-stack*)
+                                                (name)) "base")) (str "_" key))
+             (constantly value)))
 
 (defn reset-namespace [ns]
   (let [ns (str ns)
