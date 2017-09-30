@@ -14,15 +14,10 @@
   [& args]
   (when *debug* (prn args)))
 
-;;;;
-;; Mutating state
-;;
-;; Cells keep internal state. From within a cell, a user can call swap! or reset!.
-;; A cell can only be mutated by its own copy of swap!/reset!, a limitation which
-;; may prove difficult to maintain/manage.
-
 (defprotocol ICellStore
-  "Protocol for getting and putting cell values."
+  "Protocol for getting and putting cell values.
+  This allows an interactive environment to control how cell values are persisted,
+  and to facilitate reactivity."
   (put-value! [this value])
   (get-value [this])
   (invalidate! [this]))
@@ -33,37 +28,14 @@
   (with-view [this view-fn] "Wraps a cell with a view"))
 
 (defprotocol IRenderHiccup
+  "Protocol for"
   (render-hiccup [this]))
-
-#_(defprotocol ISwap*
-    "Swap value of cell. (avoid ISwap because this should not be a public interface)"
-    (-swap-cell! [this f]
-                 [this f a]
-                 [this f a b]
-                 [this f a b xs]))
 
 (defprotocol ISet!
   (-set! [this newval]
          "Set cell value without notifying dependent cells."))
 
-#_(defprotocol IReset*
-    (-set-cell! [this newval]
-                "Set cell value without notifying dependent cells.")
-    (reset-cell! [this newval]
-                 "Set cell value, notifying dependent cells."))
-
-#_(defn swap-cell!
-    "swap! a cell value"
-    ([a f]
-     (-swap-cell! a f))
-    ([a f x]
-     (-swap-cell! a f x))
-    ([a f x y]
-     (-swap-cell! a f x y))
-    ([a f x y & more]
-     (-swap-cell! a f x y more)))
-
-(defn cell-name
+(defn- cell-name
   "Accepts a cell or its name, and returns its name."
   [cell]
   (cond-> cell
@@ -120,9 +92,14 @@
   (-compute! [this] "evaluate cell and set value")
   (-compute-with-dependents! [this] "evaluate cell and flow updates to dependent cells"))
 
+
+;; temporary, experimental purposes
 (def ^:dynamic *allow-deref-while-loading?* true)
+
 (defprotocol IStatus
-  "Just an experiment to see what it might feel like store and read status information on cells."
+  "Experimental: protocol to store 'status' information on a cell.
+  Differs from metadata, in that mutations to the status of a cell
+  propagate to all copies."
   (status! [this]
            [this status]
            [this status message] "Set loading status")
@@ -133,9 +110,9 @@
   (error? [this])
   (loading? [this]))
 
-(def ^:dynamic *read-log* nil)
-
-(defn status-view [this]
+(defn status-view
+  "Experimental: cells that implement IStatus can 'show' themselves differently depending on status."
+  [this]
   (render-hiccup [:.cell-status
                   [(case (status this) :loading :.circle-loading :error :.circle-error)
                    [:div]
@@ -146,9 +123,14 @@
     (status-view self)
     @self))
 
-(declare make-cell)
+(def ^:dynamic *read-log*
+  "Dynamic var to track dependencies of a cell while its function is evaluated."
+  nil)
 
-(deftype Cell [id ^:mutable f ^:mutable state eval-context __meta]
+(declare cell*)
+
+(deftype Cell
+  [id ^:mutable f ^:mutable state eval-context __meta]
 
   ICellStore
   (get-value [this] (:value state))
@@ -172,7 +154,7 @@
 
   ICloneable
   (-clone [this]
-    (make-cell (keyword (namespace id) (util/unique-id)) f state))
+    (cell* (keyword (namespace id) (util/unique-id)) f state))
 
   ICellView
   (view [this] ((or (::view __meta)
@@ -220,12 +202,12 @@
 
   ISet!
   (-set! [this newval]
-    (log :-set-cell! this)
+    (log ::-set-cell! this)
     (put-value! this newval)
     this)
   IReset
   (-reset! [this newval]
-    (log :-reset! this newval)
+    (log ::-reset! this newval)
     (let [oldval @this]
       (-set! this newval)
       (-notify-watches this oldval newval))
@@ -274,9 +256,9 @@
 
   (-compute-with-dependents! [this]
     (if (= this (first *cell-stack*))
-      (log :-compute-with-dependents! this "Return - in current cell")
+      (log ::-compute-with-dependents! this "Return - in current cell")
       (do
-        (log :-compute-with-dependents! this)
+        (log ::-compute-with-dependents! this)
         (dispose! this)
         (binding [*read-log* (volatile! #{})]
           (let [value (-compute this)
@@ -299,7 +281,7 @@
 
 
 (defn purge-cell! [cell]
-  (log :purge-cell! cell)
+  (log ::purge-cell! cell)
   (eval-context/-dispose! cell)
   (-set! cell nil)
   (vswap! -cells dissoc (name cell))
@@ -310,31 +292,42 @@
 (def empty-cell-state {:initial-value nil
                        :dispose-fns   []})
 
-(defn make-cell
-  "Makes a new cell.
-  Calling `make-cell` with the same ID more than once returns the same cell."
+(defn cell*
+  "Should not be called directly, use `cell` macro or function instead.
+
+  Returns a new cell, or an existing cell if `id` has been seen before.
+  `f` should be a function that, given the cell's previous value, returns its next value.
+  `state` is not for public use."
   ([f]
-   (make-cell (keyword "cells.temp" (str "_" (util/unique-id))) f))
-  ([id f] (make-cell id f {:initial-value nil}))
+   (cell* (keyword "cells.temp" (str "_" (util/unique-id))) f))
+  ([id f] (cell* id f {}))
   ([id f state]
    (or (get @-cells id)
        (let [cell (->Cell id f (merge empty-cell-state state) *eval-context* {})]
-         (log :make-cell id)
+         (log ::cell* id)
          (on-dispose *eval-context* #(purge-cell! cell))
          (vswap! -cells assoc id cell)
          (-set! cell (:initial-value state))
          (-compute-with-dependents! cell)))))
 
-(defn cell [key value]
-  (make-cell (keyword (str "cells." (or (some-> (first *cell-stack*)
-                                                (name)) "base")) (str "_" key))
-             (constantly value)))
+(defn cell
+  "Returns a cell, given initial `value` and a `key` which should be unique per cell container."
+  [key value]
+  (let [cell-container-id (some-> (first *cell-stack*)
+                                  (name))
+        ns (if cell-container-id
+             (namespace cell-container-id)
+             "cells.temp")
+        prefix (if cell-container-id (name cell-container-id) "base")]
+    (cell* (keyword ns (str "_" prefix "." key))
+           (constantly value))))
 
-(defn reset-namespace [ns]
+(defn reset-namespace
+  "Purges and removes all cells in the provided namespace."
+  [ns]
   (let [ns (str ns)
         the-cells (filterv (fn [[id cell]]
                              (= (namespace id) ns)) @-cells)]
     (doseq [cell (topo-sort (map second the-cells))]
       (purge-cell! cell)
       (remove-all cell))))
-(vector)

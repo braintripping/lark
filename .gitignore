@@ -6,3 +6,5 @@ target
 **out/
 **.log
 **out/**
+doo-index.html
+test-target/public/js

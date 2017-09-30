@@ -11,7 +11,9 @@
                  [lark/structure "0.1.0-SNAPSHOT"]
                  [lark/editors "0.1.0-SNAPSHOT"]]
   :source-paths ["src"]
-  :plugins [[lein-cljsbuild "1.1.7"]]
+  :plugins [[lein-cljsbuild "1.1.7"]
+            [lein-doo "0.1.7"]]
+  :doo {:build "tests"}
   :cljsbuild {:builds [{:id           "tests"
                         :source-paths ["src"]
                         :figwheel     {:on-jsload "tests.tests-runner/run-tests"}

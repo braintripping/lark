@@ -19,7 +19,7 @@
     `(def ~the-name
        ~@(when docstring (list docstring))
        (let ~lib-bindings
-         (~'cells.cell/make-cell ~cell-name (fn [~'self] ~@body))))))
+         (~'cells.cell/cell* ~cell-name (fn [~'self] ~@body))))))
 
 (defn- cell-name
   "Construct a cell-name, incorporating the runtime-value of `key` if provided."
@@ -37,7 +37,7 @@
    `(~'cells.cell/cell nil ~expr))
   ([key expr]
    `(let ~lib-bindings
-      (~'cells.cell/make-cell ~(cell-name key) (fn [~'self] ~expr)))))
+      (~'cells.cell/cell* ~(cell-name key) (fn [~'self] ~expr)))))
 
 (defmacro cell-fn
   "Returns an anonymous function which will evaluate with the current cell in the stack.

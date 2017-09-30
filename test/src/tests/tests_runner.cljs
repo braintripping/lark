@@ -2,12 +2,13 @@
   (:require [cells.cell-tests]
             [lark.structure.bracket-tests]
             [lark.structure.edit-tests]
-            [cljs.test :refer-macros [run-all-tests]]))
+            [cljs.test :refer-macros [run-all-tests]]
+            [doo.runner :refer-macros [doo-all-tests]]))
 
 (enable-console-print!)
 
 (defn run-tests []
-  (run-all-tests ))
+  (doo-all-tests ))
 
 (defonce _
          (do (run-tests)

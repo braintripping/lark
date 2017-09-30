@@ -1,6 +1,6 @@
 (ns cells.cell-tests
   (:require [cells.cell :as cell
-             :refer [dep-graph]
+             :refer [dep-graph cell]
              :refer-macros [defcell cell]]
             [cljs.test :refer-macros [deftest testing is are run-tests]]
             [cells.lib]
@@ -125,53 +125,31 @@
          (map cell/cell-name (list m k m--)))
       "Cells are sorted topographically"))
 
+(deftest cell-function
+  (cell/reset-namespace 'cells.cell-tests)
+
+  (defcell o
+    (mapv cell (range) [:a :b]))
+
+  (is (= (mapv deref @o) [:a :b])
+      "When given unique keys, cell function returns unique cells")
 
 
+  (defcell p
+    (mapv cell (repeat 1) [:c :d]))
 
-
-(comment
-
-  ;; disabled cell-seqs.. unclear use case, unclear 'clone' behaviour
-
-  (deftest cell-seqs
-
-    (defcell n (inc @self))
-
-    (is (= (take 5 n)
-           '(1 2 3 4 5))))
-
-  ;; allowing all reset! and swap! for now.
-  ;; it is tricky to implement restrictions well, and I would like
-  ;; to see if it is necessary.
-
-  (deftest restricted-mutate
-    (defcell o (inc @self))
-    (defcell p (swap! self inc))
-    @p
-    @o
-    (is (thrown? js/Error (reset! o 10)))
-
-    (is (thrown? js/Error (swap! o inc)))
-
-    (defcell q
-      (is (thrown? js/Error (reset! o 11))))))
-
-(comment
-  (deftest timers
-    ;; doesn't really work for automated testing but we can eyeball it
-    (cell/reset-namespace 'cells.cell-tests)
-
-    (let [n (cell (interval 1000 inc))
-          o (cell (interval 1500 inc))
-          p (cell (str @n ", " @o))]
-
-      (cell (prn @p)))))
+  (is (= (mapv deref @p) [:c :c])
+      "When given same key, cell function returns existing cell"))
 
 (deftest contexts
-  ;; contexts are used to facilitate the development experience.
-  ;; we keep track of the "evaluation context" of a cell in cell/*eval-context*
-  ;; so that we can dispose of all cells associated with a particular context.
-  ;; example of a context is a code editor window that the user might re-evaluate.
+  ;; We keep track of the "evaluation context" of a cell, such as the
+  ;; code editor window where the cell is defined, to facilitate
+  ;; interactive development.
+
+  ;; Then we can dispose of all the cells 'owned' by that context when
+  ;; desired, eg. immediately before the user has made a change to the
+  ;; source code in a particular block of code, and wants to re-evaluate it.
+
   (cell/reset-namespace 'cells.cell-tests)
 
 
@@ -204,10 +182,41 @@
            (binding [cell/*eval-context* ctx-2
                      cell/*debug* true]
              (cell/-compute-with-dependents! s)
-             (cell/-compute-with-dependents! s-)
-             ))
+             (cell/-compute-with-dependents! s-))))
 
-  ;(is (= (cell/transitive-dependents r) (dep-set [r- s s-])))
-  ;(reset! r 2)
-  ;(is (= 2 @r @r- @s @s-))
-  )
+#_(comment
+    ;; REMOVED cell-seqs.. unclear use case, unclear 'clone' behaviour
+
+    (deftest cell-seqs
+
+      (defcell n (inc @self))
+
+      (is (= (take 5 n)
+             '(1 2 3 4 5))))
+
+    ;; REMOVED restrictions on reset! and swap!.
+    ;; it is tricky to implement restrictions well, and
+    ;; treating cells more like atoms has interesting use cases.
+
+    (deftest restricted-mutate
+      (defcell o (inc @self))
+      (defcell p (swap! self inc))
+      @p
+      @o
+      (is (thrown? js/Error (reset! o 10)))
+
+      (is (thrown? js/Error (swap! o inc)))
+
+      (defcell q
+        (is (thrown? js/Error (reset! o 11))))))
+
+#_(comment
+    (deftest timers
+      ;; need a better approach for automated testing of interval
+      (cell/reset-namespace 'cells.cell-tests)
+
+      (let [n (cell (interval 1000 inc))
+            o (cell (interval 1500 inc))
+            p (cell (str @n ", " @o))]
+
+        (cell (prn @p)))))
