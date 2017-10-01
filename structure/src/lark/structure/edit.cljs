@@ -16,10 +16,10 @@
 
 (def clipboard-helper-element
   (memoize (fn []
-             (let [textarea (doto (dom/createElement "div")
+             (let [textarea (doto (dom/createElement "pre")
                               (dom/setProperties #js {:id              "magic-tree.pasteHelper"
                                                       :contentEditable true
-                                                      :className       "fixed pre o-0 z-0 bottom-0 right-0"}))]
+                                                      :className       "fixed o-0 z-0 bottom-0 right-0"}))]
                (dom/appendChild js/document.body textarea)
                textarea))))
 
@@ -126,7 +126,7 @@
     (.replaceRange editor text pos (move-char editor pos amount))
     this)
   (set-editor-cursor! [this]
-    (.setCursor editor pos)
+    (.setCursor editor pos nil #js {:scroll false})
     this)
   (adjust-for-changes! [this changes]
     (set! pos (adjust-for-changes pos changes))

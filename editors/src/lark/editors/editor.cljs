@@ -41,6 +41,8 @@
   ([editor]
    (focus! editor nil))
   ([editor coords]
+   (when (aget js/window "y")
+     (throw (js/Error. "focus!")))
    (-focus! editor coords)
    true))
 

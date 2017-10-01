@@ -1,8 +1,8 @@
-(defproject lark/editors "0.1.0-SNAPSHOT"
+(defproject lark/value-viewer "0.1.0-SNAPSHOT"
 
-  :url "https://www.github.com/braintripping/lark/tree/master/editors"
+  :url "https://www.github.com/braintripping/lark/tree/master/value-viewer"
 
-  :description "Protocols for editors."
+  :description "Navigable views for Clojure data structures."
 
   :license {:name "Mozilla Public License 2.0"
             :url  "https://www.mozilla.org/en-US/MPL/2.0/"}

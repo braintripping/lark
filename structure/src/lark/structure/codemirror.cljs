@@ -87,9 +87,9 @@
 (defn return-cursor-to-root! [cm]
   (when (.somethingSelected cm)
     (if-let [cursor (cursor-root cm)]
-      (.setCursor cm cursor)
+      (.setCursor cm cursor nil #js {:scroll false})
       (if-let [sels (selection-root cm)]
-        (.setSelections cm sels))))
+        (.setSelections cm sels #js {:scroll false}))))
   (unset-cursor-root! cm))
 
 (defn get-cursor [cm]
@@ -109,7 +109,7 @@
   (unset-cursor-root! cm)
   (let [pos (cond-> pos
                     (map? pos) (range->Pos))]
-    (.setCursor cm pos pos))
+    (.setCursor cm pos nil #js {:scroll false}))
   cm)
 
 (defn set-preserve-cursor!
@@ -119,7 +119,7 @@
     (let [cursor-pos (get-cursor editor)]
       (.setValue editor (str value))
       (if (-> editor (aget "state" "focused"))
-        (.setCursor editor cursor-pos))))
+        (.setCursor editor cursor-pos nil #js {:scroll false}))))
   editor)
 
 (defn range->positions
@@ -329,7 +329,7 @@
                    coords)]
       (doto this
         (.focus)
-        (cond-> coords (.setCursor coords)))
+        (cond-> coords (.setCursor coords nil #js {:scroll false})))
       (Editor/scroll-into-view (Editor/cursor-coords this))))
 
   (get-cursor [this]
