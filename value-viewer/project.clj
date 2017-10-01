@@ -1,4 +1,4 @@
-(defproject lark/value-viewer "0.1.0"
+(defproject lark/value-viewer "0.1.1-SNAPSHOT"
 
   :url "https://www.github.com/braintripping/lark/tree/master/value-viewer"
 
