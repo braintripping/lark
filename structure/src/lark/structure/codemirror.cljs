@@ -183,6 +183,7 @@
 
 (defn highlight-range [pos node]
   (if (and (tree/has-edges? node)
+           (not= :string (:tag node))
            (tree/within? (tree/inner-range node) pos))
     (tree/inner-range node)
     node))
