@@ -1,4 +1,4 @@
-(defproject lark/structure "0.1.1-SNAPSHOT"
+(defproject lark/structure "0.1.2-SNAPSHOT"
 
   :url "https://www.github.com/braintripping/lark/tree/master/structure"
 
@@ -8,7 +8,7 @@
             :url  "https://www.mozilla.org/en-US/MPL/2.0/"}
 
   :dependencies [[fast-zip "0.7.0"]
-                 [magic-tree "0.0.14-SNAPSHOT"]
+                 [lark/tree "0.1.0-SNAPSHOT"]
                  [cljsjs/codemirror "5.24.0-1"]
                  [lark/commands "0.1.1-SNAPSHOT"]
                  [lark/editors "0.1.0-SNAPSHOT"]]

@@ -1,7 +1,7 @@
 (ns lark.structure.edit
   (:refer-clojure :exclude [char])
-  (:require [magic-tree.core :as tree]
-            [magic-tree.range :as range]
+  (:require [lark.tree.core :as tree]
+            [lark.tree.range :as range]
             [lark.structure.codemirror :as cm]
             [fast-zip.core :as z]
             [goog.dom :as dom]
@@ -17,7 +17,7 @@
 (def clipboard-helper-element
   (memoize (fn []
              (let [textarea (doto (dom/createElement "pre")
-                              (dom/setProperties #js {:id              "magic-tree.pasteHelper"
+                              (dom/setProperties #js {:id              "lark-tree-pasteHelper"
                                                       :contentEditable true
                                                       :className       "fixed o-0 z-0 bottom-0 right-0"}))]
                (dom/appendChild js/document.body textarea)

@@ -1,4 +1,4 @@
-(defproject lark/value-viewer "0.1.1-SNAPSHOT"
+(defproject lark/value-viewer "0.1.2-SNAPSHOT"
 
   :url "https://www.github.com/braintripping/lark/tree/master/value-viewer"
 
@@ -8,7 +8,7 @@
             :url  "https://www.mozilla.org/en-US/MPL/2.0/"}
 
   :dependencies [[org.clojure/clojure "1.9.0-alpha17"]
-                 [org.clojure/clojurescript "1.9.854"]
+                 [org.clojure/clojurescript "1.9.946"  :scope "provided"]
                  [re-view "0.3.29"]]
 
   :source-paths ["src"]

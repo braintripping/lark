@@ -1,5 +1,5 @@
 (ns lark.structure.bracket-tests
-  (:require [magic-tree.core :as tree]
+  (:require [lark.tree.core :as tree]
             [cljs.test :refer-macros [deftest testing is are run-tests]]))
 
 (defn round-trip [source]

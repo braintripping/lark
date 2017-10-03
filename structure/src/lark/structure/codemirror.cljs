@@ -2,7 +2,7 @@
   (:require [cljsjs.codemirror :as CM]
             [fast-zip.core :as z]
             [goog.events :as events]
-            [magic-tree.core :as tree]
+            [lark.tree.core :as tree]
             [goog.events.KeyCodes :as KeyCodes]
             [goog.dom :as gdom]
             [goog.object :as gobj]
