@@ -127,8 +127,6 @@
 
                            (when (or (seq (filter identity results))
                                      (seq (filter :intercept? the-commands)))
-                             (prn (or (seq (filter identity results))
-                                      (seq (filter :intercept? the-commands))))
                              (.stopPropagation e)
                              (.preventDefault e)
                              (clear-whichkey!))
