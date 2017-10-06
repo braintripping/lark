@@ -7,4 +7,7 @@ target
 **.log
 **out/**
 doo-index.html
-test-target/public/js
+tests/test-target/public/js
+test/target
+cljs-runtime
+out

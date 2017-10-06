@@ -1,23 +1,24 @@
 (ns lark.structure.codemirror
-  (:require [cljsjs.codemirror :as CM]
-            [fast-zip.core :as z]
-            [goog.events :as events]
-            [lark.tree.core :as tree]
-            [goog.events.KeyCodes :as KeyCodes]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]
+  (:require #_[cljsjs.codemirror :as CM]
+    [codemirror :as CM]
+    [fast-zip.core :as z]
+    [goog.events :as events]
+    [lark.tree.core :as tree]
+    [goog.events.KeyCodes :as KeyCodes]
+    [goog.dom :as gdom]
+    [goog.object :as gobj]
 
     ;; for protocols:
-            [lark.editors.editor :as Editor]
+    [lark.editors.editor :as Editor]
     ;; for M1 modifier differentiation
-            [lark.commands.registry :as registry ]))
+    [lark.commands.registry :as registry]))
 
 (def ^:dynamic *get-ns* (fn [] (symbol "cljs.user")))
 
 (def Pos CM/Pos)
 (def changeEnd CM/changeEnd)
 
-(extend-type js/CodeMirror.Pos
+(extend-type CM/Pos
   IComparable
   (-compare [x y]
     (CM/cmpPos x y))
@@ -190,15 +191,15 @@
 
 (defn select-at-cursor [{{:keys [bracket-loc]} :magic/cursor :as cm} top-loc?]
   (when bracket-loc
-    (let [pos (Pos->range (get-cursor cm))
+    (let [pos  (Pos->range (get-cursor cm))
           node (if top-loc? (z/node (tree/top-loc bracket-loc))
                             (highlight-range pos (z/node bracket-loc)))]
       (some->> node
                (temp-select-node! cm)))))
 
 (defn keyup-selection-update! [cm e]
-  (let [key-code (KeyCodes/normalizeKeyCode (.-keyCode e))
-        secondary registry/SHIFT
+  (let [key-code      (KeyCodes/normalizeKeyCode (.-keyCode e))
+        secondary     registry/SHIFT
         primary-down? (registry/M1-down? e)]
     (if (and (= key-code secondary)
              primary-down?
@@ -229,7 +230,7 @@
         ;; TODO
         ;; derive className from error name, not all errors are unmatched brackets.
         ;; (somehow) add a tooltip or other attribute to the marker (for explanation).
-        handles (mark-ranges! cm error-ranges #js {:className "CodeMirror-unmatchedBracket"})]
+        handles      (mark-ranges! cm error-ranges #js {:className "CodeMirror-unmatchedBracket"})]
     (swap! cm assoc-in [:magic/errors :handles] handles)))
 
 (defn update-ast!
@@ -261,7 +262,7 @@
       (when (or (not= pos prev-pos)
                 (not= prev-zipper zipper))
         (when-let [loc (some-> zipper (tree/node-at pos))]
-          (let [bracket-loc (cursor-loc pos loc)
+          (let [bracket-loc  (cursor-loc pos loc)
                 bracket-node (z/node bracket-loc)]
             (when brackets? (match-brackets! cm bracket-node))
             (swap! cm update :magic/cursor merge {:loc          loc
@@ -275,7 +276,7 @@
   (doseq [opt opts] (.setOption cm opt true)))
 
 
-(specify! (.-prototype js/CodeMirror)
+(specify! (.-prototype CM)
 
   ILookup
   (-lookup
@@ -357,14 +358,14 @@
   (end [this] (Pos (.lastLine this) (count (.getLine this (.lastLine this))))))
 
 
-(.defineOption js/CodeMirror "magicTree" false
+(.defineOption CM "magicTree" false
                (fn [cm on?]
                  (when on?
                    (require-opts cm ["cljsState"])
                    (.on cm "change" update-ast!)
                    (update-ast! cm))))
 
-(.defineOption js/CodeMirror "magicCursor" false
+(.defineOption CM "magicCursor" false
                (fn [cm on?]
                  (when on?
                    (require-opts cm ["magicTree"])
@@ -373,7 +374,7 @@
                    (.on cm "change" update-cursor!)
                    (update-cursor! cm))))
 
-(.defineOption js/CodeMirror "magicBrackets" false
+(.defineOption CM "magicBrackets" false
                (fn [cm on?]
                  (when on?
                    (require-opts cm ["magicCursor"])
@@ -385,5 +386,5 @@
 
                    (swap! cm assoc :magic/brackets? true))))
 
-(.defineOption js/CodeMirror "cljsState" false
+(.defineOption CM "cljsState" false
                (fn [cm] (aset cm "cljs$state" (or (aget cm "cljs$state") {::watches {}}))))

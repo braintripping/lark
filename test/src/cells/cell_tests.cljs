@@ -182,7 +182,30 @@
            (binding [cell/*eval-context* ctx-2
                      cell/*debug* true]
              (cell/-compute-with-dependents! s)
-             (cell/-compute-with-dependents! s-))))
+             (cell/-compute-with-dependents! s-)))
+
+
+
+  (def ctx-3 (eval-context/new-context))
+  (def ctx-4 (eval-context/new-context))
+
+  (binding [cell/*eval-context* ctx-3]
+    (defn f1 [x]
+      (cell @(cell x (str x 1)))))
+
+  (defn f2 []
+    (def f3 (cell @(f1 "X"))))
+  (binding [cell/*eval-context* ctx-4]
+    (f2))
+
+  (is (= "X1" @f3))
+  (eval-context/dispose! ctx-4)
+  (is (= nil @f3))
+  (f2)
+  (is (= "X1" @f3))
+
+
+  )
 
 #_(comment
     ;; REMOVED cell-seqs.. unclear use case, unclear 'clone' behaviour

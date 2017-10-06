@@ -1,7 +1,5 @@
 (ns lark.structure.test-utils
-  (:require [lark.structure.codemirror]
-            [cljsjs.codemirror :as CM]
-            [cljsjs.codemirror.addon.search.searchcursor]
+  (:require [codemirror :as CM]
             [clojure.string :as string]))
 
 (def editor

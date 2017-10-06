@@ -1,4 +1,4 @@
-(defproject lark/tree "0.1.2-SNAPSHOT"
+(defproject lark/tree "0.1.3-SNAPSHOT"
   :description "Parsing tool for editors"
   :url "https://github.com/braintripping/lark/tree/master/tree"
   :license {:name "GNU Affero General Public License v3.0"
@@ -11,7 +11,8 @@
                  [org.clojure/core.match "0.3.0-alpha4"]
                  [fast-zip "0.7.0"]
                  [net.cgrand/macrovich "0.2.0"]
-                 [lark/util "0.1.0-SNAPSHOT"]]
+                 [lark/util "0.1.0-SNAPSHOT"]
+                 ]
 
   :plugins [[lein-cljsbuild "1.1.2"]
             [lein-doo "0.1.6"]]

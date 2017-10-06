@@ -36,8 +36,7 @@
   "Add contextual data to command"
   [context {:keys [exec-pred intercept-pred] :as command-entry}]
   (let [exec? (boolean (or (nil? exec-pred) (exec-pred context)))
-        intercept? (if intercept-pred (intercept-pred context)
-                                      exec?)]
+        intercept? (and intercept-pred (intercept-pred context))]
     (assoc command-entry
       :exec? exec?
       :intercept? intercept?)))
@@ -111,9 +110,8 @@
                                _ (when the-commands
                                    (doseq [f (vals @-before-exec)]
                                      (f)))
-                               ;; NOTE
-                               ;; only running 1 command, sorting by priority.
                                results (when the-commands
+                                         ;; `take` with `filter` means we execute commands until one returns true, then stop
                                          (take 1 (filter identity (map #(exec-command context %) the-commands))))]
 
                            (reset! state (cond-> (assoc @state :modifiers-down modifiers-down)
@@ -127,7 +125,10 @@
                                (.preventDefault e)
                                (.stopPropagation e))
 
-                           (when (seq (filter identity results))
+                           (when (or (seq (filter identity results))
+                                     (seq (filter :intercept? the-commands)))
+                             (prn (or (seq (filter identity results))
+                                      (seq (filter :intercept? the-commands))))
                              (.stopPropagation e)
                              (.preventDefault e)
                              (clear-whichkey!))

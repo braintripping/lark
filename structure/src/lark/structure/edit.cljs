@@ -6,13 +6,14 @@
             [fast-zip.core :as z]
             [goog.dom :as dom]
             [goog.dom.Range :as Range]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [codemirror :as CM])
   (:require-macros [lark.structure.edit :refer [operation]]))
 
 (def other-bracket {\( \) \[ \] \{ \} \" \"})
 (defn spaces [n] (apply str (take n (repeat " "))))
 
-(def pass (.-Pass js/CodeMirror))
+(def pass CM/Pass)
 
 (def clipboard-helper-element
   (memoize (fn []
@@ -79,6 +80,7 @@
 (defprotocol IPointer
   (get-range [this i])
   (move [this amount])
+  (move-while [this i pred])
   (insert! [this s] [this replace-i s])
   (set-editor-cursor! [this])
   (adjust-for-changes! [this changes]))
@@ -130,7 +132,15 @@
     this)
   (adjust-for-changes! [this changes]
     (set! pos (adjust-for-changes pos changes))
-    this))
+    this)
+  (move-while [this i pred]
+    (loop [the-pos pos]
+      (let [next-pos (move-char editor the-pos i)
+            char (char-at editor next-pos)]
+        (if (and (pred char) (not (.-hitSide next-pos)))
+          (recur next-pos)
+          (do (set! pos the-pos)
+              this))))))
 
 (defn pointer
   ([editor] (pointer editor (cm/get-cursor editor)))

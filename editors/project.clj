@@ -1,4 +1,4 @@
-(defproject lark/editors "0.1.2-SNAPSHOT"
+(defproject lark/editors "0.1.3-SNAPSHOT"
 
   :url "https://www.github.com/braintripping/lark/tree/master/editors"
 
