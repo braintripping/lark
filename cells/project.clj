@@ -1,4 +1,4 @@
-(defproject lark/cells "0.1.5"
+(defproject lark/cells "0.1.6-SNAPSHOT"
   :description "Interactive async in ClojureScript."
   :url "https://www.github.com/braintripping/lark/tree/master/cells"
   :license {:name "Mozilla Public License 2.0"
