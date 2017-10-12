@@ -1,4 +1,4 @@
-(defproject lark/value-viewer "0.1.2-SNAPSHOT"
+(defproject lark/value-viewer "0.1.2"
 
   :url "https://www.github.com/braintripping/lark/tree/master/value-viewer"
 
@@ -9,7 +9,7 @@
 
   :dependencies [[org.clojure/clojure "1.9.0-alpha17"]
                  [org.clojure/clojurescript "1.9.946"  :scope "provided"]
-                 [re-view "0.3.29"]]
+                 [re-view "0.3.33"]]
 
   :source-paths ["src"]
 
