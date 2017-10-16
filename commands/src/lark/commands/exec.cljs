@@ -50,8 +50,8 @@
 
 (defn set-context!
   "Mutates command-context by merging provided context map."
-  [context]
-  (vswap! context merge context))
+  [ctx]
+  (vswap! context merge ctx))
 
 (def -before-exec (volatile! {}))
 (defn before-exec
