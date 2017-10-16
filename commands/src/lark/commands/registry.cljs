@@ -2,6 +2,7 @@
   (:require [goog.object :as gobj]
             [clojure.string :as string]
             [clojure.set :as set]
+            [goog.events]
             ["keypress.js" :refer [keypress]]))
 
 (defonce Keypress (new (.-Listener keypress)))
