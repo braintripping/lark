@@ -1,4 +1,4 @@
-(defproject lark/structure "0.1.4-SNAPSHOT"
+(defproject lark/structure "0.1.5-SNAPSHOT"
 
   :url "https://www.github.com/braintripping/lark/tree/master/structure"
 

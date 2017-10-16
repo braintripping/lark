@@ -4,7 +4,6 @@
     [fast-zip.core :as z]
     [goog.events :as events]
     [lark.tree.core :as tree]
-    [goog.events.KeyCodes :as KeyCodes]
     [goog.dom :as gdom]
     [goog.object :as gobj]
 
@@ -197,8 +196,7 @@
                (temp-select-node! cm)))))
 
 (defn keyup-selection-update! [cm e]
-  (let [key-code        (KeyCodes/normalizeKeyCode (.-keyCode e))
-        primary-down?   (registry/M1-down? e)
+  (let [primary-down?   (registry/M1-down? e)
         secondary-down? (.-shiftKey e)]
     (if (and secondary-down?
              primary-down?
