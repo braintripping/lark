@@ -19,7 +19,6 @@
   ;; NOTE: impure, we access the `state` atom inside the setTimeout callback
   (cond-> current-state
           (nil? timeout) (assoc :which-key/timeout (js/setTimeout (fn []
-                                                                    (prn :show-which-key)
                                                                     (swap! state assoc :which-key/active? true)) which-key-time))))
 
 (defn clear-which-key
