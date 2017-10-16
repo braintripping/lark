@@ -49,8 +49,6 @@
 (defn- cursor-bookmark []
   (gdom/createDom "div" #js {"className" "cursor-marker"}))
 
-(def M1 (registry/modifier-keycode "M1"))
-
 (defn cursor-loc
   "Current sexp, or nearest sexp to the left, or parent."
   [pos loc]
@@ -65,6 +63,7 @@
 
 
 (defn set-cursor-root! [cm]
+
   (if (and (.somethingSelected cm)
            (not (:selection-root/marker cm))
            (not (:cursor-root/marker cm)))
@@ -198,10 +197,10 @@
                (temp-select-node! cm)))))
 
 (defn keyup-selection-update! [cm e]
-  (let [key-code      (KeyCodes/normalizeKeyCode (.-keyCode e))
-        secondary     registry/SHIFT
-        primary-down? (registry/M1-down? e)]
-    (if (and (= key-code secondary)
+  (let [key-code        (KeyCodes/normalizeKeyCode (.-keyCode e))
+        primary-down?   (registry/M1-down? e)
+        secondary-down? (.-shiftKey e)]
+    (if (and secondary-down?
              primary-down?
              (not (selection-root cm)))
       (select-at-cursor cm false)

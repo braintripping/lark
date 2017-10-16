@@ -10,7 +10,7 @@
                  [org.clojure/core.match "0.3.0-alpha4"]
 
 
-                 [lark/tree ""]
+                 [lark/tree "0.1.3-SNAPSHOT"]
                  [re-view "0.3.31"]
                  [lark/commands "0.1.2-SNAPSHOT"]
                  [lark/value-viewer "0.1.2-SNAPSHOT"]

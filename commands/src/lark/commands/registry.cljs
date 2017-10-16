@@ -1,173 +1,65 @@
 (ns lark.commands.registry
   (:require [goog.object :as gobj]
             [clojure.string :as string]
-            [goog.events.KeyCodes :as KeyCodes]
-            [clojure.set :as set])
-  (:import [goog.events KeyCodes]))
+            [clojure.set :as set]
+            ["keypress.js" :refer [keypress]]))
 
-(defonce commands (atom {}))
-(defonce mappings (atom {}))
-
-(def mouse-icon (-> [:svg {:fill "currentColor", :height "14", :view-box "0 0 24 24", :width "14", :xmlns "http://www.w3.org/2000/svg"}
-                     [:path {:d "M0 0h24v24H0z", :fill "none"}]
-                     [:path {:d "M13 1.07V9h7c0-4.08-3.05-7.44-7-7.93zM4 15c0 4.42 3.58 8 8 8s8-3.58 8-8v-4H4v4zm7-13.93C7.05 1.56 4 4.92 4 9h7V1.07z"}]]
-                    (with-meta (name "z"))))
-
-(defn endkey->keycode [k]
-  (let [k-upper (string/upper-case k)
-        k (get {"1"            "ONE"
-                "2"            "TWO"
-                "3"            "THREE"
-                "4"            "FOUR"
-                "5"            "FIVE"
-                "6"            "SIX"
-                "7"            "SEVEN"
-                "8"            "EIGHT"
-                "9"            "NINE"
-                "["            "OPEN_SQUARE_BRACKET"
-                "]"            "CLOSE_SQUARE_BRACKET"
-                \\             "BACKSLASH"
-                "/"            "SLASH"
-                ","            "COMMA"
-                "."            "PERIOD"
-                "="            "EQUALS"
-                "+"            "PLUS"
-                "-"            "DASH"
-                ";"            "SEMICOLON"
-                "`"            "TILDE"
-                "'"            "SINGLE_QUOTE"
-                "CLICK"        0
-                "CLICK_MIDDLE" 1
-                "CLICK_RIGHT"  2} k-upper k-upper)]
-    (gobj/get KeyCodes k k)))
-
-
+(defonce Keypress (new (.-Listener keypress)))
 
 (def mac? (let [platform (.. js/navigator -platform)]
             (or (string/starts-with? platform "Mac")
                 (string/starts-with? platform "iP"))))
 
-(defn modifier-keycode
-  "Given a modifier string, which must be M1, M2, M3, or SHIFT,
-  returns an appropriate keycode for the current platform.
+(defn capitalize [s]
+  (str (.toUpperCase (subs s 0 1)) (subs s 1)))
 
-  We may add to or modify this as we discover more variance in platform behaviour."
-  [k]
-  (->> (case (string/upper-case k)
-         ("CMD"
-           "META"
-           "COMMAND") "META"
+(defn format-segment [target modifier]
+  (let [modifier (string/lower-case modifier)]
+    (or (case target :Keypress.js (case modifier "m1" "meta"
+                                                 "m2" "alt"
+                                                 "`" "accent"
+                                                 "tilde" "~"
+                                                 modifier)
+                     :internal (case modifier ("meta"
+                                                "ctrl"
+                                                "command") "m1"
+                                              ("alt"
+                                                "option") "m2"
+                                              "accent" "`"
+                                              "tilde" "~"
+                                              modifier)
+                     :display (let [modifier (format-segment :internal modifier)]
+                                (case modifier
+                                  "m1" (if mac? "⌘" "Ctrl")
+                                  "m2" (if mac? "Option" "Alt")
+                                  "left" "←"
+                                  "right" "→"
+                                  "up" "↑"
+                                  "down" "↓"
+                                  "backspace" "⌫"
+                                  (capitalize modifier))))
+        modifier)))
 
-         ("CTRL"
-           "CONTROL") "CTRL"
+(def modifiers-internal #{"m1" "m2" "shift"})
 
-         ("ALT"
-           "OPT"
-           "OPTION") "ALT"
+(defn binding-string->vec [s]
+  (mapv (partial format-segment :internal) (string/split s #"[\s-]")))
 
-         "TAB" "TAB"
+(defn binding-set [s]
+  (set (binding-string->vec s)))
 
-         "SHIFT" "SHIFT"
-
-         ;; We use M1, M2, and M3 to express "primary, secondary, and tertiary" modifiers
-         ;; which will be mapped to keys most likely to work on the user's platform.
-         ;;
-         ;; Primary      M1     Mac: Command
-         ;;                     PC:  Control
-         ;;
-         ;; Secondary    M2     Mac: Option
-         ;;                     PC:  Alt
-         ;;
-         ;; Tertiary     M3     Mac: Control
-         ;;                     PC:  Windows/Meta
-
-         "M1" (if mac? "META"
-                       "CTRL")
-         "M2" "ALT"
-
-         "M3" (if mac? "CTRL"
-                       "META")
-
-         nil)
-       (gobj/get KeyCodes)))
-
-(defn event-modifiers [e]
-  (cond-> #{}
-          (.-metaKey e) (conj (.-META KeyCodes))
-          (.-ctrlKey e) (conj (.-CTRL KeyCodes))
-          (.-shiftKey e) (conj (.-SHIFT KeyCodes))
-          (.-altKey e) (conj (.-ALT KeyCodes))))
+(defonce commands (atom {}))
+(defonce mappings (atom {}))
+(defonce handler (volatile! nil))
 
 (defn M1-down? [e]
   (if mac? (.-metaKey e)
            (.-ctrlKey e)))
 
-(def M1 (modifier-keycode "M1"))
-(def M2 (modifier-keycode "M2"))
-(def M3 (modifier-keycode "M3"))
-(def SHIFT (modifier-keycode "SHIFT"))
-
-(defn M3-down? [e]
-  (if mac? (.-ctrlKey e)
-           (.-metaKey e)))
-
-(defn normalize-keyset-string [patterns]
-  (->> (string/split patterns #"\s")
-       (mapv (fn [s]
-               (let [keys (string/split s #"[-]")]
-                 (set (mapv #(or (modifier-keycode %)
-                                 (endkey->keycode %)) keys)))))))
-
-(def code->symbol
-  (->> {(.-CTRL KeyCodes)                           "⌃"
-        (.-META KeyCodes)                           (if mac? "⌘" "Meta")
-        (.-SHIFT KeyCodes)                #_"Shift" "⇧"
-        (.-ALT KeyCodes)                            (if mac? "⎇" "Alt")
-        (.-ENTER KeyCodes)                          "Enter"             #_"⏎"
-        (.-BACKSPACE KeyCodes)                      "⌫"
-        (.-LEFT KeyCodes)                           "←"
-        (.-TAB KeyCodes)                            "Tab" #_"⇥"
-        (.-RIGHT KeyCodes)                          "→"
-        (.-UP KeyCodes)                             "↑"
-        (.-DOWN KeyCodes)                           "↓"
-        (.-HOME KeyCodes)                           "↖"
-        (.-END KeyCodes)                            "↘"
-        (.-OPEN_SQUARE_BRACKET KeyCodes)            "["
-        (.-CLOSE_SQUARE_BRACKET KeyCodes)           "]"
-        (.-SLASH KeyCodes)                          "/"
-        (.-BACKSLASH KeyCodes)                      \\
-        (.-APOSTROPHE KeyCodes)                     "'"
-        (.-COMMA KeyCodes)                          ","
-        (.-PERIOD KeyCodes)                         "."
-        (.-EQUALS KeyCodes)                         "="
-        (.-PLUS_SIGN KeyCodes)                      "+"
-        (.-DASH KeyCodes)                           "-"
-        (.-SEMICOLON KeyCodes)                      ";"
-        (.-TILDE KeyCodes)                          "`"
-        57                                          "("
-        48                                          ")"
-        219                                         "{"
-        221                                         "}"
-        0                                           mouse-icon
-        1                                           mouse-icon
-        2                                           mouse-icon}))
-
-(def modifiers #{(.-META KeyCodes)
-                 (.-CTRL KeyCodes)
-                 (.-ALT KeyCodes)
-                 (.-SHIFT KeyCodes)
-                 (.-TAB KeyCodes)})
-
-(defn show-key [key-code]
-  (or (get code->symbol key-code)
-      (if (string? key-code)
-        key-code
-        (.fromCharCode js/String key-code))))
-
-(defn get-keyset-commands [keys-pressed]
-  (get-in @mappings [keys-pressed :exec]))
-
-(def normalize-keycode KeyCodes/normalizeKeyCode)
+(defn get-keyset-commands
+  "Returns command-names for a set of keys"
+  [keyset]
+  (get-in @mappings [keyset :exec]))
 
 (defn spaced-name [the-name]
   (str (string/upper-case (first the-name)) (string/replace (subs the-name 1) "-" " ")))
@@ -177,21 +69,35 @@
   [coll x]
   (remove #(= % x) coll))
 
-(defn- add-binding [mappings name parsed-binding]
-  (update-in mappings (conj parsed-binding :exec) conj name))
+(defn distinct-conj
+  "Conj `x` to coll, distinct"
+  [coll x]
+  (distinct (conj coll x)))
 
-(defn- remove-binding [mappings name parsed-binding]
-  (update-in mappings (conj parsed-binding :exec) seq-disj name))
+(defn- add-binding [mappings name binding]
+  (let [binding-vec (binding-string->vec binding)
+        path        [(set binding-vec) :exec]]
+    (when-not (seq (get-in mappings path))
+      (.register_combo Keypress #js {:keys        (to-array (mapv (partial format-segment :Keypress.js) binding-vec))
+                                     :is_solitary true
+                                     :on_keydown  #(@handler binding binding-vec)}))
+    (update-in mappings path distinct-conj name)))
+
+(defn- remove-binding [mappings name binding]
+  (let [binding-vec (binding-string->vec binding)
+        path        [(set binding-vec) :exec]
+        mappings    (update-in mappings path seq-disj name)]
+    (when-not (seq (get-in mappings path))
+      (.unregister_combo Keypress #js {:keys (to-array (mapv (partial format-segment :Keypress.js) binding-vec))}))
+    mappings))
 
 (defn bind!
   "Takes a map of {<command-name>, <binding string>} and registers keybindings."
   [bindings]
   (let [[mappings* commands*] (reduce (fn [[mappings commands] [the-name binding]]
-                                        (let [parsed-binding (normalize-keyset-string binding)]
-                                          [(add-binding mappings the-name parsed-binding)
-                                           (-> commands
-                                               (update-in [the-name :bindings] (comp distinct conj) binding)
-                                               (update-in [the-name :parsed-bindings] (comp distinct conj) parsed-binding))])) [@mappings @commands] bindings)]
+                                        [(add-binding mappings the-name binding)
+                                         (update-in commands [the-name :bindings] (comp distinct conj) binding)])
+                                      [@mappings @commands] bindings)]
     (reset! mappings mappings*)
     (reset! commands commands*)))
 
@@ -199,43 +105,38 @@
   "Takes a map of {<command-name>, <binding string>} and removes keybindings."
   [bindings]
   (let [[mappings* commands*] (reduce (fn [[mappings commands] [the-name binding]]
-                                        (let [parsed-binding (normalize-keyset-string binding)]
-                                          [(remove-binding mappings the-name parsed-binding)
-                                           (-> commands
-                                               (update-in [the-name :bindings] seq-disj binding)
-                                               (update-in [the-name :parsed-bindings] seq-disj parsed-binding))])) [@mappings @commands] bindings)]
+                                        [(remove-binding mappings the-name binding)
+                                         (update-in commands [the-name :bindings] seq-disj binding)]) [@mappings @commands] bindings)]
     (reset! mappings mappings*)
     (reset! commands commands*)))
 
 (defn register! [{the-name :name
                   priority :priority
                   :as      the-command} bindings]
-  (let [parsed-bindings (map normalize-keyset-string bindings)]
-    (swap! commands assoc the-name (merge the-command
-                                          {:display-namespace (some-> (namespace the-name)
-                                                                      (spaced-name))
-                                           :display-name      (spaced-name (name the-name))
-                                           :bindings          bindings
-                                           :priority          (or priority 0)
-                                           :parsed-bindings   parsed-bindings}))
-    (reset! mappings (reduce (fn [mappings pattern]
-                               (add-binding mappings the-name pattern)) @mappings parsed-bindings))))
+  (swap! commands assoc the-name (merge the-command
+                                        {:display-namespace (some-> (namespace the-name)
+                                                                    (spaced-name))
+                                         :display-name      (spaced-name (name the-name))
+                                         :bindings          bindings
+                                         :priority          (or priority 0)}))
+  (reset! mappings (reduce (fn [mappings pattern]
+                             (add-binding mappings the-name pattern)) @mappings bindings)))
 
 
 (defn deregister! [the-name]
-  (let [{:keys [parsed-bindings]} (get @commands the-name)]
-    (reset! mappings (reduce (fn [mappings pattern]
-                               (update-in mappings (conj pattern :exec) disj the-name)) @mappings parsed-bindings))
-
+  (let [{:keys [bindings]} (get @commands the-name)]
+    (unbind! (apply hash-map (interleave (repeat the-name) bindings)))
     (swap! commands dissoc the-name)))
 
 
 (def sort-ks #(sort-by (fn [x] (if (string? x) x (:name (meta x)))) %))
 
-(defn keyset-string [keyset]
-  (->> (concat (->> (sort-ks (set/intersection keyset modifiers))
-                    (map show-key))
+(defn binding-segment-compare [segment]
+  (if (#{"m1" "m2" "shift"} segment) 0 1))
 
-               (->> (sort-ks (set/difference keyset modifiers))
-                    (map show-key)))
-       (apply str)))
+(defn keyset-string [keyset]
+  (let [modifiers #{"m1" "m2" "shift"}]
+    (->> (sort-by binding-segment-compare (seq keyset))
+         (mapv (partial format-segment :display))
+         (interpose " ")
+         (apply str))))

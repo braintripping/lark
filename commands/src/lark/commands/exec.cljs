@@ -6,24 +6,68 @@
 (def debug? false)
 (def context (volatile! {}))
 (def last-selections (volatile! (list)))
+(def which-key-time 1000)
 
-(def state (atom {:modifiers-down    #{}
-                  :which-key/active? false}))
+(def state
+  "Atom to hold currently held modifiers & which-key state."
+  (atom {:modifiers-down    #{}
+         :which-key/active? false}))
 
-(defn set-context! [values]
-  (vswap! context merge values))
+(defn start-which-key-timeout
+  "Starts a which-key timeout, to be called when modifier is pressed. Idempotent."
+  [{:keys [which-key/timeout] :as current-state}]
+  ;; NOTE: impure, we access the `state` atom inside the setTimeout callback
+  (cond-> current-state
+          (nil? timeout) (assoc :which-key/timeout (js/setTimeout (fn []
+                                                                    (prn :show-which-key)
+                                                                    (swap! state assoc :which-key/active? true)) which-key-time))))
+
+(defn clear-which-key
+  "Fn which toggles which-key off, clearing timeout if it exists."
+  [{:keys [modifiers-down which-key/timeout] :as current-state}]
+  (some-> timeout
+          (js/clearTimeout))
+  (cond-> current-state
+          (empty? modifiers-down) (dissoc :which-key/timeout :which-key/active?)))
+
+(defonce _ (do
+             (doseq [modifier ["shift"
+                               "alt"
+                               "meta"]]
+               (let [internal-modifier (registry/format-segment :internal modifier)]
+                 (.register_combo registry/Keypress
+                                  #js {:keys       #js [modifier]
+                                       :on_keydown #(let [{:keys [which-key/timeout]} @state]
+                                                      (reset! state (-> @state
+                                                                        (update :modifiers-down conj internal-modifier)
+                                                                        (start-which-key-timeout)))
+                                                      true)
+                                       :on_keyup   #(let [modifiers (disj (:modifiers-down @state) internal-modifier)]
+                                                      (reset! state (-> @state
+                                                                        (assoc :modifiers-down modifiers)
+                                                                        (clear-which-key)))
+                                                      true)})))))
+
+(defn set-context!
+  "Mutates command-context by merging provided context map."
+  [context]
+  (vswap! context merge context))
 
 (def -before-exec (volatile! {}))
-(defn before-exec [key cb]
-  (vswap! -before-exec assoc key cb))
+(defn before-exec
+  "Registers a function `f` which will be called before any command is executed."
+  [key f]
+  (vswap! -before-exec assoc key f))
 
 (def -context-augmenters (volatile! {}))
 (defn add-context-augmenter!
-  "Adds a reducing function which will be applied to the context before use."
+  "Registers a reducing function which will be applied to the context before it is returned from `get-context`."
   [key f]
   (vswap! -context-augmenters assoc key f))
 
 (defn get-context
+  "Returns the current command context, as determined by previous calls to `set-context!`,
+  after context augmenting fns have been applied."
   ([] (get-context nil))
   ([event-attrs]
    (let [{:keys [block-view] :as context} @context]
@@ -33,9 +77,11 @@
            (augment-context))))))
 
 (defn apply-context
-  "Add contextual data to command"
+  "Add contextual data to command. Adds keys `:exec?`, whether the command will be evaluated
+  given the current context, and `:intercept?`, whether the command should preventDefault
+  even if it is not executed and returns true."
   [context {:keys [exec-pred intercept-pred] :as command-entry}]
-  (let [exec? (boolean (or (nil? exec-pred) (exec-pred context)))
+  (let [exec?      (boolean (or (nil? exec-pred) (exec-pred context)))
         intercept? (and intercept-pred (intercept-pred context))]
     (assoc command-entry
       :exec? exec?
@@ -47,7 +93,10 @@
   [context name]
   (apply-context context (get @registry/commands name)))
 
-(defn contextual? [command]
+(defn contextual?
+  "Returns true if the command will have an effect (either by executing or
+  preventingDefault). Expects a command which has already had `apply-context` applied."
+  [command]
   (or (:exec? command) (:intercept? command)))
 
 (defn exec-command
@@ -58,11 +107,13 @@
     (and result (not= result (.-Pass js/CodeMirror)))))
 
 (defn exec-command-name
+  "Execute a command by name."
   ([name] (exec-command-name name (get-context)))
   ([name context]
    (exec-command context (get-command context name))))
 
 (defn keyset-commands
+  "Returns commands which are at least partial matches of the currently pressed keys."
   ([] (keyset-commands #{} (get-context)))
   ([modifiers-down current-context]
    (->> @registry/mappings
@@ -80,91 +131,40 @@
   (->> (vals @registry/commands)
        (mapv #(apply-context context %))))
 
-(def reverse-compare (fn [a b] (compare b a)))
+(def reverse-compare
+  "Comparator function with inverse order to regular `compare`"
+  (fn [a b] (compare b a)))
 
-(defn clear-whichkey-timeout! []
-  (some-> (:which-key/timeout @state) (js/clearTimeout)))
+(defn handler
+  "Main handler function which is called whenever a bound keybinding is triggered.
+  Finds context-relevant commands and executes them until one returns true."
+  [binding binding-vec]
+  (let [binding-set (set binding-vec)
+        command-names     (seq (registry/get-keyset-commands binding-set))
+        which-key-active? (:which-key/active? @state)
+        context           (when command-names
+                            (get-context {:binding     binding
+                                          :binding-vec binding-vec}))
+        the-commands      (when command-names
+                            (->> (map #(get-command context %) command-names)
+                                 (filter contextual?)
+                                 (sort-by :priority reverse-compare)))
+        _                 (when the-commands
+                            (doseq [f (vals @-before-exec)]
+                              (f)))
+        results           (when the-commands
+                            ;; `take` with `filter` means we execute commands until one returns true, then stop
+                            (take 1 (filter identity (map #(exec-command context %) the-commands))))
+        prevent-default?  (or (seq (filter identity results))
+                              (seq (filter :intercept? the-commands)))]
+    (reset! state (cond-> @state
+                          (and (or prevent-default?
+                                   (seq the-commands))
+                               (seq (set/difference (set binding-vec)
+                                                    registry/modifiers-internal))) (clear-which-key)
+                          the-commands (assoc :last-exec-keys binding-vec)))
+    (if prevent-default?
+      false
+      true)))
 
-(defn clear-whichkey! []
-  (clear-whichkey-timeout!)
-  (swap! state assoc :which-key/active? false))
-
-(defn init-listeners []
-  (let [clear-keys #(swap! state assoc :modifiers-down #{}
-                           :which-key/active? false)
-        which-key-delay 1000
-        handle-keydown (fn [e]
-                         (let [keycode (registry/normalize-keycode (.-keyCode e))
-                               {which-key-active? :which-key/active?} @state
-                               modifier? (contains? registry/modifiers keycode)
-                               modifiers-down (registry/event-modifiers e)
-                               keys-down (conj modifiers-down keycode)
-                               command-names (seq (registry/get-keyset-commands keys-down))
-                               context (when command-names
-                                         (get-context {:keycode keycode
-                                                       :key     (.-key e)}))
-                               the-commands (when command-names
-                                              (->> (map #(get-command context %) command-names)
-                                                   (filter contextual?)
-                                                   (sort-by :priority reverse-compare)))
-                               _ (when the-commands
-                                   (doseq [f (vals @-before-exec)]
-                                     (f)))
-                               results (when the-commands
-                                         ;; `take` with `filter` means we execute commands until one returns true, then stop
-                                         (take 1 (filter identity (map #(exec-command context %) the-commands))))]
-
-                           (reset! state (cond-> (assoc @state :modifiers-down modifiers-down)
-                                                 (and which-key-active? (= keycode 27))
-                                                 (assoc :which-key/active? false)
-                                                 the-commands
-                                                 (assoc :last-exec-keys keys-down)))
-                           ;; if we use Tab as a modifier,
-                           ;; we'll stop its default behaviour
-                           #_(when (= 9 keycode)
-                               (.preventDefault e)
-                               (.stopPropagation e))
-
-                           (when (or (seq (filter identity results))
-                                     (seq (filter :intercept? the-commands)))
-                             (.stopPropagation e)
-                             (.preventDefault e)
-                             (clear-whichkey!))
-
-                           (clear-whichkey-timeout!)
-
-                           (when modifier?
-                             (swap! state assoc
-                                    :which-key/timeout (js/setTimeout
-                                                         #(let [keys-down (:modifiers-down @state)]
-                                                            (when (and (seq keys-down)
-                                                                       (not= keys-down #{(registry/endkey->keycode "shift")}))
-                                                              (swap! state assoc :which-key/active? true)))
-                                                         which-key-delay)))))]
-
-    (clear-keys)
-
-    ;; NOTE: 'keydown' listeners MUST be activated in the 'capture' phase.
-    ;;       Otherwise, editor state can change before the command is activated.
-
-    (events/listen js/window "keydown" handle-keydown true)
-
-    (events/listen js/window "keyup"
-                   (fn [e]
-                     (let [keycode (registry/normalize-keycode (.-keyCode e))]
-                       (when (registry/modifiers keycode)
-                         (let [modifiers-down (registry/event-modifiers e)]
-                           (reset! state
-                                   (cond-> (assoc @state :modifiers-down modifiers-down)
-                                           (empty? modifiers-down) (assoc :which-key/active? false))))))) true)
-
-    (events/listen js/window "mousedown"
-                   (fn [e]
-                     (doseq [command (-> (conj (:modifiers-down @state) (.-button e))
-                                         (registry/get-keyset-commands))]
-                       (exec-command-name command))))
-
-    (events/listen js/window #js ["blur" "focus"] #(when (= (.-target %) (.-currentTarget %))
-                                                     (clear-keys)))))
-
-(defonce _ (init-listeners))
+(vreset! registry/handler handler)

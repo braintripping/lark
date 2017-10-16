@@ -11,7 +11,7 @@
                  [org.clojure/core.match "0.3.0-alpha4"]
                  [fast-zip "0.7.0"]
                  [net.cgrand/macrovich "0.2.0"]
-                 [lark/util "0.1.0-SNAPSHOT"]
+                 [lark/util "0.1.2-SNAPSHOT"]
                  ]
 
   :plugins [[lein-cljsbuild "1.1.2"]
