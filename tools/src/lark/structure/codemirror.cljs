@@ -8,7 +8,7 @@
     [goog.object :as gobj]
 
     ;; for protocols:
-    [lark.editors.editor :as Editor]
+    [lark.editor :as Editor]
     ;; for M1 modifier differentiation
     [lark.commands.registry :as registry]))
 

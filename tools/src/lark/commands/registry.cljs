@@ -80,6 +80,7 @@
   (let [binding-vec (binding-string->vec binding)
         path        [(set binding-vec) :exec]]
     (when-not (seq (get-in mappings path))
+      (js/console.log "register-combo" (str name) (to-array (mapv (partial format-segment :Keypress.js) binding-vec)))
       (.register_combo Keypress #js {:keys        (to-array (mapv (partial format-segment :Keypress.js) binding-vec))
                                      :is_solitary true
                                      :on_keydown  #(@handler binding binding-vec)}))
@@ -90,6 +91,7 @@
         path        [(set binding-vec) :exec]
         mappings    (update-in mappings path seq-disj name)]
     (when-not (seq (get-in mappings path))
+      (prn :unregister-combo binding)
       (.unregister_combo Keypress #js {:keys (to-array (mapv (partial format-segment :Keypress.js) binding-vec))}))
     mappings))
 

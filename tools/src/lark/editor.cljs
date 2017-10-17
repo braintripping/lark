@@ -1,4 +1,4 @@
-(ns lark.editors.editor
+(ns lark.editor
   (:require [re-view.core :as v]))
 
 (def view-index (volatile! {}))
