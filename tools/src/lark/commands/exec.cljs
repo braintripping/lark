@@ -42,7 +42,6 @@
                                                                         (start-which-key-timeout)))
                                                       true)
                                        :on_keyup   #(let [modifiers (disj (:modifiers-down @state) internal-modifier)]
-                                                     (prn :on-keyup modifier)
                                                       (reset! state (-> @state
                                                                         (assoc :modifiers-down modifiers)
                                                                         (clear-which-key)))
@@ -139,7 +138,7 @@
   "Main handler function which is called whenever a bound keybinding is triggered.
   Finds context-relevant commands and executes them until one returns true."
   [binding binding-vec]
-  (let [binding-set (set binding-vec)
+  (let [binding-set       (set binding-vec)
         command-names     (seq (registry/get-keyset-commands binding-set))
         which-key-active? (:which-key/active? @state)
         context           (when command-names
