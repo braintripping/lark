@@ -44,5 +44,5 @@
                            :command (if arglist
                                       `(fn ~name-as-symbol ~arglist
                                          ~@body)
-                                      `(fn ~name-as-symbol [] ~'(.-Pass js/CodeMirror)))))]
+                                      `(fn ~name-as-symbol [] :lark.commands/Pass))))]
     `(~'lark.commands.registry/register! ~options ~bindings)))

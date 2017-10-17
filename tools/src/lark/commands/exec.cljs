@@ -103,7 +103,7 @@
   [context {:keys [command exec? intercept? name]}]
   (let [result (when exec? (command context))]
     (when (and exec? debug?) (prn "Executed command:" name))
-    (and result (not= result (.-Pass js/CodeMirror)))))
+    (and result (not= result :lark.commands/Pass))))
 
 (defn exec-command-name
   "Execute a command by name."

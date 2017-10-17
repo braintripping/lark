@@ -6,14 +6,11 @@
             [fast-zip.core :as z]
             [goog.dom :as dom]
             [goog.dom.Range :as Range]
-            [clojure.string :as string]
-            ["codemirror" :as CM])
+            [clojure.string :as string])
   (:require-macros [lark.structure.edit :refer [operation]]))
 
 (def other-bracket {\( \) \[ \] \{ \} \" \"})
 (defn spaces [n] (apply str (take n (repeat " "))))
-
-(def pass CM/Pass)
 
 (def clipboard-helper-element
   (memoize (fn []
@@ -243,17 +240,17 @@
 
 (def copy-form
   (fn [cm] (if (cm/selection? cm)
-             pass
+             :lark.commands/Pass
              (copy-range! cm (get-in cm [:magic/cursor :bracket-node])))))
 
 (def cut-form
   (fn [cm] (if (cm/selection? cm)
-             pass
+             :lark.commands/Pass
              (cut-range! cm (get-in cm [:magic/cursor :bracket-node])))))
 
 (def delete-form
   (fn [cm] (if (cm/selection? cm)
-             pass
+             :lark.commands/Pass
              (cm/replace-range! cm "" (get-in cm [:magic/cursor :bracket-node])))))
 
 (def hop-left
