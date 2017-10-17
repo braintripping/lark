@@ -1,4 +1,4 @@
-(ns lark.util.backtick)
+(ns lark.backtick.core)
 
 ;template quoting: from https://github.com/brandonbloom/backtick
 ;Copyright © 2012 Brandon Bloom

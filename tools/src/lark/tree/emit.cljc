@@ -10,8 +10,8 @@
             [clojure.tools.reader.edn :as edn]
             [clojure.tools.reader :as r]
             [lark.tree.util :refer [contains-identical-keyword?]]
-            [lark.util.backtick :refer [template]]]))
-  #?(:cljs (:require-macros [lark.util.backtick :refer [template]]
+            [lark.backtick.core :refer [template]]]))
+  #?(:cljs (:require-macros [lark.backtick.core :refer [template]]
              [lark.tree.util :refer [contains-identical-keyword?]])))
 
 (def ^:dynamic *ns* (symbol "lark.tree.user"))
