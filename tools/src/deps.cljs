@@ -12,4 +12,6 @@
                  :requires ["cljsjs.codemirror"]}
                 {:file           "js/blank.js"
                  :provides       ["codemirror"]
-                 :global-exports {codemirror CodeMirror}}]}
+                 :global-exports {codemirror CodeMirror}}]
+                 :npm-deps {"keypress.js" "braintripping/Keypress#e29eb2e"}
+                  :externs ["externs/lark.commands.ext.js"]}
