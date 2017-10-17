@@ -1,6 +1,6 @@
 (ns lark.structure.codemirror
-  (:require #_[cljsjs.codemirror :as CM]
-    [codemirror :as CM]
+  (:require
+    ["codemirror" :as CM]
     [fast-zip.core :as z]
     [goog.events :as events]
     [lark.tree.core :as tree]
