@@ -1,4 +1,4 @@
-(defproject lark/util "0.1.3-SNAPSHOT"
+(defproject lark/backtick "0.1.0"
   :description "Assorted utilities"
   :url "https://github.com/braintripping/lark/tree/master/tree"
   :license {:name "Eclipse Public License"
