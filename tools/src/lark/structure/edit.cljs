@@ -48,11 +48,21 @@
 
 (defn cursor-skip-bounds
   [{{:keys [pos loc]} :magic/cursor :as cm} side]
-  (let [next-loc (case side :left z/left :right z/right)]
+  (let [traverse (case side :left z/left :right z/right)
+        next-loc #(when-let [start (traverse %)]
+                    (->> (iterate traverse start)
+                         (keep identity)
+                         (filter (comp (complement tree/whitespace?)
+                                       z/node))
+                         (first)))]
     (loop [loc loc]
-      (cond (not= pos (tree/bounds (z/node loc) side)) (tree/bounds (z/node loc) side)
-            (next-loc loc) (recur (next-loc loc))
-            :else (some->> (z/up loc) recur)))))
+      (let [node (z/node loc)]
+        (if (and (not (tree/whitespace? node))
+                 (not= pos (tree/bounds node side)))
+          (tree/bounds (z/node loc) side)
+          (if-let [loc (next-loc loc)]
+            (recur loc)
+            (some->> (z/up loc) recur)))))))
 
 (defn cursor-skip!
   "Returns function for moving cursor left or right, touching only node boundaries."
