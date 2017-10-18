@@ -4,14 +4,14 @@
             [clojure.set :as set]))
 
 (def debug? false)
-(def context (volatile! {}))
-(def last-selections (volatile! (list)))
+(defonce context (volatile! {}))
+(defonce last-selections (volatile! (list)))
 (def which-key-time 1000)
 
-(def state
-  "Atom to hold currently held modifiers & which-key state."
-  (atom {:modifiers-down    #{}
-         :which-key/active? false}))
+(defonce state
+         ;;Atom to hold currently held modifiers & which-key state.
+         (atom {:modifiers-down    #{}
+                :which-key/active? false}))
 
 (defn start-which-key-timeout
   "Starts a which-key timeout, to be called when modifier is pressed. Idempotent."
@@ -51,13 +51,13 @@
   [ctx]
   (vswap! context merge ctx))
 
-(def -before-exec (volatile! {}))
+(defonce -before-exec (volatile! {}))
 (defn before-exec
   "Registers a function `f` which will be called before any command is executed."
   [key f]
   (vswap! -before-exec assoc key f))
 
-(def -context-augmenters (volatile! {}))
+(defonce -context-augmenters (volatile! {}))
 (defn add-context-augmenter!
   "Registers a reducing function which will be applied to the context before it is returned from `get-context`."
   [key f]
