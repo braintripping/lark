@@ -55,13 +55,20 @@
      :end-column (- end-column (count right))}
     node))
 
+(defn shift-end [{:keys [line column]}]
+  {:end-line line :end-column column})
+(defn shift-start [{:keys [end-line end-column]}]
+  {:line end-line :column end-column})
+
 (defn bounds
   "Returns position map for left or right boundary of the node."
   ([node] (select-keys node [:line :column :end-line :end-column]))
   ([node side]
    (case side :left (select-keys node [:line :column])
-              :right {:line   (:end-line node)
-                      :column (:end-column node)})))
+              :right (if-let [end-line (:end-line node)]
+                       {:line   end-line
+                        :column (:end-column node)}
+                       (bounds node :left)))))
 
 (defn pos= [p1 p2]
   (= (bounds p1)

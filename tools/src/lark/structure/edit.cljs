@@ -284,7 +284,6 @@
         :as                                    cm}]
     (let [sel         (cm/current-selection-bounds cm)
           loc         (tree/node-at zipper sel)
-          node        (z/node loc)
           select!     (partial tracked-select cm)
           cursor-root (cm/cursor-root cm)
           selection?  (cm/selection? cm)]
@@ -295,9 +294,10 @@
         (if-not loc
           sel
           (let [node        (z/node loc)
-                inner-range (tree/inner-range node)]
-            (cond (range/pos= sel (tree/inner-range node)) (select! node)
-                  (tree/within? inner-range sel) (select! inner-range)
+                inner-range (when (tree/has-edges? node)
+                              (tree/inner-range node))]
+            (cond (range/pos= sel inner-range) (select! node)
+                  (tree/inside? inner-range sel) (select! inner-range)
                   (range/pos= sel node) (recur (z/up loc))
                   (tree/within? node sel) (select! node)
                   :else (recur (z/up loc)))))))
@@ -309,34 +309,26 @@
              (cm/select-range cm))
     true))
 
-(defn expand-selection-left [{{:keys [bracket-node] pos :pos} :magic/cursor
-                              zipper                          :zipper
-                              :as                             cm}]
+(defn expand-selection-x [{zipper :zipper
+                           :as    cm} direction]
   (let [selection-bounds (cm/current-selection-bounds cm)
-        selection-loc    (tree/node-at zipper (tree/bounds selection-bounds :left))
+        selection-loc    (tree/node-at zipper (tree/bounds selection-bounds direction))
+        selection-node   (z/node selection-loc)
         cursor-root      (cm/cursor-root cm)]
     (when cursor-root
       (push-cursor! cm)
       (push-stack! cm selection-bounds))
-    (if-let [left-loc (first (filter (comp (complement tree/whitespace?) z/node) (tree/left-locs selection-loc)))]
-      (tracked-select cm (merge (tree/bounds (z/node left-loc) :left)
-                                (select-keys selection-bounds [:end-line :end-column])))
-      (expand-selection cm)))
-  true)
+    (if (and (tree/has-edges? selection-node)
+             (= (tree/bounds selection-bounds direction)
+                (tree/bounds (tree/inner-range selection-node) direction)))
+      (expand-selection cm)
 
-(defn expand-selection-right [{{:keys [bracket-node] pos :pos} :magic/cursor
-                               zipper                          :zipper
-                               :as                             cm}]
-  (let [selection-bounds (cm/current-selection-bounds cm)
-        selection-loc    (tree/node-at zipper (tree/bounds selection-bounds :right))
-        cursor-root      (cm/cursor-root cm)]
-    (when cursor-root
-      (push-cursor! cm)
-      (push-stack! cm selection-bounds))
-    (if-let [right-loc (first (filter (comp (complement tree/whitespace?) z/node) (tree/right-locs selection-loc)))]
-      (tracked-select cm (merge (select-keys (z/node right-loc) [:end-line :end-column])
-                                (tree/bounds selection-bounds :left)))
-      (expand-selection cm)))
+      (if-let [adjacent-loc (first (filter (comp (complement tree/whitespace?) z/node) ((case direction :right tree/right-locs
+                                                                                                        :left tree/left-locs) selection-loc)))]
+        (tracked-select cm (merge (z/node adjacent-loc)
+                                  (case direction :right (tree/bounds selection-bounds :left)
+                                                  :left (tree/shift-end (tree/bounds selection-bounds :right)))))
+        (expand-selection cm))))
   true)
 
 (def backspace! #(.execCommand % "delCharBefore"))

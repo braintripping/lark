@@ -63,10 +63,10 @@
     edit/expand-selection "(<a > )" "(<a  >)"
     edit/expand-selection "(<a b>)" "<(a b)>"
 
-    edit/expand-selection-left "(<a>)" "<(a)>"
-    edit/expand-selection-left "(b <a>)" "(<b a>)"
-    edit/expand-selection-left "c (<b a>)" "c <(b a)>"
-    edit/expand-selection-left "c <(b a)>" "<c (b a)>"
+    #(edit/expand-selection-x % :left) "(<a>)" "<(a)>"
+    #(edit/expand-selection-x % :left) "(b <a>)" "(<b a>)"
+    #(edit/expand-selection-x % :left) "c (<b a>)" "c <(b a)>"
+    #(edit/expand-selection-x % :left) "c <(b a)>" "<c (b a)>"
 
     edit/slurp-forward "(|) a" "(| a)"
     edit/slurp-forward "`(|) a" "`(| a)"

@@ -62,6 +62,8 @@
 (def edge-ranges range/edge-ranges)
 (def inner-range range/inner-range)
 (def bounds range/bounds)
+(def shift-end range/shift-end)
+(def shift-start range/shift-start)
 
 (def empty-range? range/empty-range?)
 (def node-highlights range/node-highlights)
