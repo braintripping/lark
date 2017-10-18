@@ -20,16 +20,10 @@
     (or (case target :Keypress.js (case modifier "m1" "meta"
                                                  "m2" "alt"
                                                  "m3" (if mac? "ctrl" "command")
-                                                 "`" "accent"
-                                                 "tilde" "~"
                                                  modifier)
-                     :internal (case modifier ("meta"
-                                                "ctrl"
-                                                "command") "m1"
+                     :internal (case modifier "meta" "m1"
                                               ("alt"
                                                 "option") "m2"
-                                              "accent" "`"
-                                              "tilde" "~"
                                               modifier)
                      :display (let [modifier (format-segment :internal modifier)]
                                 (case modifier
