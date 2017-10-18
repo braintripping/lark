@@ -38,11 +38,11 @@
     edit/cut-form "|(+ 1)" "|"
     edit/cut-form "(|+ 1)" "(| 1)"
 
-    edit/hop-left "( )|" "|( )"
-    edit/hop-left "( |)" "(| )"
-    edit/hop-left "( a|)" "( |a)"
-    edit/hop-left "( ab|c)" "( |abc)"
-    edit/hop-left "((|))" "(|())"
+    #(edit/cursor-skip! % :left) "( )|" "|( )"
+    #(edit/cursor-skip! % :left) "( |)" "(| )"
+    #(edit/cursor-skip! % :left) "( a|)" "( |a)"
+    #(edit/cursor-skip! % :left) "( ab|c)" "( |abc)"
+    #(edit/cursor-skip! % :left) "((|))" "(|())"
 
     edit/comment-line "abc|\ndef" ";;abc\ndef|"
     edit/comment-line "abc\n|def" "abc\n;;def|"

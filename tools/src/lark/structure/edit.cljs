@@ -256,12 +256,6 @@
              :lark.commands/Pass
              (cm/replace-range! cm "" (get-in cm [:magic/cursor :bracket-node])))))
 
-(def hop-left
-  #(cursor-skip! % :left))
-
-(def hop-right
-  #(cursor-skip! % :right))
-
 (defn pop-stack! [cm]
   (when-let [stack (get-in cm [:magic/cursor :stack])]
     (let [stack (cond-> stack
