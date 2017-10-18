@@ -29,6 +29,7 @@
 
 (defprotocol ICursor
   (get-cursor [this])
+  (set-cursor [this position])
   (cursor-coords [this])
   (coords-cursor [this client-x client-y])
 

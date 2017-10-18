@@ -61,38 +61,39 @@
     (tree/include-prefix-parents the-loc)))
 
 
-(defn set-cursor-root! [cm]
+(defn set-temp-marker! [cm]
+  (when-not (::temp-marker cm)
+    (swap! cm assoc ::temp-marker (if (.somethingSelected cm)
+                                    [:selections (.listSelections cm)]
+                                    [:cursor (.setBookmark cm
+                                                           (.getCursor cm)
+                                                           #js {:widget (cursor-bookmark)})]))))
 
-  (if (and (.somethingSelected cm)
-           (not (:selection-root/marker cm))
-           (not (:cursor-root/marker cm)))
-    (swap! cm assoc :selection-root/marker (.listSelections cm))
-    (swap! cm assoc :cursor-root/marker (.setBookmark cm
-                                                      (.getCursor cm)
-                                                      #js {:widget (cursor-bookmark)}))))
+(defn unset-temp-marker! [cm]
+  (let [[kind marker] (::temp-marker cm)]
+    (when (= kind :cursor)
+      (.clear marker)))
+  (swap! cm dissoc ::temp-marker))
 
-(defn unset-cursor-root! [cm]
-  (when-let [marker (:cursor-root/marker cm)]
-    (.clear marker))
-  (swap! cm dissoc :cursor-root/marker :selection-root/marker))
+(defn temp-marker-cursor-pos [cm]
+  (let [[kind marker] (::temp-marker cm)]
+    (when (= kind :cursor)
+      (.find marker))))
 
-(defn cursor-root [cm]
-  (when-let [marker (:cursor-root/marker cm)]
-    (.find marker)))
+(defn temp-marker-selections [cm]
+  (let [[kind marker] (::temp-marker cm)]
+    (when (= kind :selections)
+      marker)))
 
-(defn selection-root [cm]
-  (:selection-root/marker cm))
-
-(defn return-cursor-to-root! [cm]
-  (when (.somethingSelected cm)
-    (if-let [cursor (cursor-root cm)]
-      (.setCursor cm cursor nil #js {:scroll false})
-      (if-let [sels (selection-root cm)]
-        (.setSelections cm sels #js {:scroll false}))))
-  (unset-cursor-root! cm))
+(defn return-to-temp-marker! [editor]
+  (when-let [[kind data] (::temp-marker editor)]
+    (case kind :cursor (.setCursor editor (.find data) nil #js {:scroll false})
+               :selections (do
+                               (.setSelections editor data nil #js {:scroll false})))
+    (unset-temp-marker! editor)))
 
 (defn get-cursor [cm]
-  (or (cursor-root cm)
+  (or (temp-marker-cursor-pos cm)
       (.getCursor cm)))
 
 (defn selection? [cm]
@@ -105,7 +106,7 @@
     (.getSelection cm)))
 
 (defn set-cursor! [cm pos]
-  (unset-cursor-root! cm)
+  (unset-temp-marker! cm)
   (let [pos (cond-> pos
                     (map? pos) (range->Pos))]
     (.setCursor cm pos nil #js {:scroll false}))
@@ -152,11 +153,8 @@
                   (Pos (or end-line line) (or end-column column)))))
 
 (defn temp-select-node! [cm node]
-  (when (not (tree/whitespace? node))
-    (when (and (not (:cursor-root/marker cm))
-               (not (:selection-root/marker cm)))
-      (set-cursor-root! cm))
-    (select-range cm (tree/bounds node))))
+  (set-temp-marker! cm)
+  (select-range cm (tree/bounds node)))
 
 (defn pos->boundary
   ([pos]
@@ -192,17 +190,12 @@
     (let [pos  (Pos->range (get-cursor cm))
           node (if top-loc? (z/node (tree/top-loc bracket-loc))
                             (highlight-range pos (z/node bracket-loc)))]
-      (some->> node
-               (temp-select-node! cm)))))
+      (when (and node (not (tree/whitespace? node)))
+        (temp-select-node! cm node)))))
 
 (defn keyup-selection-update! [cm e]
-  (let [primary-down?   (registry/M1-down? e)
-        secondary-down? (.-shiftKey e)]
-    (if (and secondary-down?
-             primary-down?
-             (not (selection-root cm)))
-      (select-at-cursor cm false)
-      (return-cursor-to-root! cm))))
+  (when-not (registry/M1-down? e)
+    (return-to-temp-marker! cm)))
 
 (defn clear-brackets! [cm]
   (doseq [handle (get-in cm [:magic/cursor :handles])]
@@ -311,7 +304,7 @@
   Editor/IHistory
 
   (get-selections [cm]
-    (if-let [root-cursor (cursor-root cm)]
+    (if-let [root-cursor (temp-marker-cursor-pos cm)]
       #js [#js {:anchor root-cursor
                 :head   root-cursor}]
       (.listSelections cm)))
@@ -334,6 +327,8 @@
   (get-cursor [this]
     (when-not (.somethingSelected this)
       (get-cursor this)))
+  (set-cursor [this position]
+    (.setCursor this position))
   (coords-cursor [this client-x client-y]
     (.coordsChar this #js {:left client-x
                            :top  client-y} "window"))
@@ -378,7 +373,7 @@
 
                    (.on cm "keyup" keyup-selection-update!)
                    #_(.on cm "keydown" keyup-selection-update!)
-                   (events/listen js/window "blur" #(return-cursor-to-root! cm))
+                   (events/listen js/window "blur" #(return-to-temp-marker! cm))
                    (events/listen js/window "blur" #(clear-brackets! cm))
 
                    (swap! cm assoc :magic/brackets? true))))

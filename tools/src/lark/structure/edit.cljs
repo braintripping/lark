@@ -276,16 +276,15 @@
 
 (defn push-cursor! [cm]
   (push-stack! cm (cm/Pos->range (cm/get-cursor cm)))
-  (cm/unset-cursor-root! cm))
+  (cm/unset-temp-marker! cm))
 
 (def expand-selection
-  (fn [{{:keys [bracket-node] cursor-pos :pos} :magic/cursor
-        zipper                                 :zipper
-        :as                                    cm}]
+  (fn [{zipper :zipper
+        :as    cm}]
     (let [sel         (cm/current-selection-bounds cm)
           loc         (tree/node-at zipper sel)
           select!     (partial tracked-select cm)
-          cursor-root (cm/cursor-root cm)
+          cursor-root (cm/temp-marker-cursor-pos cm)
           selection?  (cm/selection? cm)]
       (when (or cursor-root (not selection?))
         (push-cursor! cm)
@@ -297,7 +296,8 @@
                 inner-range (when (tree/has-edges? node)
                               (tree/inner-range node))]
             (cond (range/pos= sel inner-range) (select! node)
-                  (tree/inside? inner-range sel) (select! inner-range)
+                  (some-> inner-range
+                          (tree/within? sel)) (select! inner-range)
                   (range/pos= sel node) (recur (z/up loc))
                   (tree/within? node sel) (select! node)
                   :else (recur (z/up loc)))))))
@@ -314,7 +314,7 @@
   (let [selection-bounds (cm/current-selection-bounds cm)
         selection-loc    (tree/node-at zipper (tree/bounds selection-bounds direction))
         selection-node   (z/node selection-loc)
-        cursor-root      (cm/cursor-root cm)]
+        cursor-root      (cm/temp-marker-cursor-pos cm)]
     (when cursor-root
       (push-cursor! cm)
       (push-stack! cm selection-bounds))
