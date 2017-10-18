@@ -29,20 +29,20 @@
 
 ;; identical? lookups are 10x faster than set-contains and 2x faster than js-array indexOf
 
-(defn ^:boolean newline?
+(defn ^boolean newline?
   [c]
   (contains-identical-keyword? [\newline
                                 \return]
                                c))
 
-(defn ^:boolean space?
+(defn ^boolean space?
   [c]
   (contains-identical-keyword? [\space
                                 \tab
                                 non-breaking-space]
                                c))
 
-(defn ^:boolean whitespace?
+(defn ^boolean whitespace?
   [c]
   (or (contains-identical-keyword? [\,
                                     \space
@@ -51,13 +51,13 @@
                                    c)
       (newline? c)))
 
-(defn ^:boolean boundary?
+(defn ^boolean boundary?
   [c]
   "Check whether a given char is a token boundary."
   (contains-identical-keyword? [\" \: \; \' \@ \^ \` \~ \( \) \[ \] \{ \} \\ nil]
                                c))
 
-(defn ^:boolean vector-contains?
+(defn ^boolean vector-contains?
   [v item]
   (let [end (count v)]
     (loop [i 0]
@@ -77,7 +77,7 @@
   [reader]
   (let [c (r/read-char reader)]
     (str c
-         (if ^:boolean (not (identical? c \\))
+         (if ^boolean (not (identical? c \\))
            (read-to-boundary reader #{})
            ""))))
 
@@ -119,7 +119,7 @@
   (rd/read-repeatedly reader #(binding [*delimiter* delimiter]
                                 (parse-next %))))
 
-(defn ^:boolean printable-only? [n]
+(defn ^boolean printable-only? [n]
   (contains? #{:space :comma :newline :comment :comment-block}
              (:tag n)))
 
@@ -142,7 +142,7 @@
   "Parse a single token."
   [reader]
   (let [first-char (r/read-char reader)
-        s          (->> (if ^:boolean (identical? first-char \\)
+        s          (->> (if ^boolean (identical? first-char \\)
                           (read-to-char-boundary reader)
                           (read-to-boundary reader #{}))
                         (str first-char))
@@ -155,7 +155,7 @@
                                            :clj (.getMessage e))]
                             (when (string/ends-with? message "/")
                               ::invalid-symbol))))
-        is-symbol  ^:boolean (or (symbol? sexp) (= sexp ::invalid-symbol))]
+        is-symbol  ^boolean (or (symbol? sexp) (= sexp ::invalid-symbol))]
     (if is-symbol
       [:symbol (str s (read-to-boundary reader #{\' \:}))]
       [:token s])))
@@ -164,7 +164,7 @@
   [reader]
   (r/read-char reader)
   (if-let [c (r/peek-char reader)]
-    (if ^:boolean (identical? c \:)
+    (if ^boolean (identical? c \:)
       [:namespaced-keyword (edn/read reader)]
       (do (r/unread reader \:)
           [:keyword (edn/read reader)]))
@@ -201,7 +201,7 @@
   [reader]
   (r/read-char reader)
   (let [c (r/peek-char reader)]
-    (if ^:boolean (identical? c \@)
+    (if ^boolean (identical? c \@)
       [:unquote-splicing (parse-printables reader :unquote 1 true)]
       [:unquote (parse-printables reader :unquote 1)])))
 

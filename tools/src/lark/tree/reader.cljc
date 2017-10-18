@@ -23,14 +23,14 @@
 (defn read-while
   "Read while the chars fulfill the given condition. Does not consume the unmatching char."
   [reader p? & [eof?]]
-  (let [eof? (if ^:boolean (nil? eof?)
+  (let [eof? (if ^boolean (nil? eof?)
                (not (p? nil))
                eof?)]
     #?(:cljs (.clear buf)
        :clj  (.setLength buf 0))
     (loop []
       (if-let [c (r/read-char reader)]
-        (if ^:boolean (p? c)
+        (if ^boolean (p? c)
           (do
             (.append buf c)
             (recur))
@@ -38,7 +38,7 @@
             (r/unread reader c)
             #?(:cljs (.toString buf)
                :clj  (str buf))))
-        (if ^:boolean eof?
+        (if ^boolean eof?
           #?(:cljs (.toString buf)
              :clj  (str buf))
           (throw-reader reader "Unexpected EOF."))))))
@@ -107,17 +107,17 @@
   {:pre [(pos? n)]}
   (loop [c 0
          vs []]
-    (if ^:boolean (< c n)
+    (if ^boolean (< c n)
       (if-let [v (read-fn reader)]
         (recur
-          (if ^:boolean (p? v) (inc c) c)
+          (if ^boolean (p? v) (inc c) c)
           (conj vs v))
         (throw-reader
           reader
           "%s node expects %d value%s."
           node-tag
           n
-          (if ^:boolean (= n 1) "" "s")))
+          (if ^boolean (= n 1) "" "s")))
       vs)))
 
 (defn read-string-data
