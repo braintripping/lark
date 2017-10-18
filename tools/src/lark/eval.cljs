@@ -225,6 +225,7 @@
                             (contains? repl-specials (first form))
                             (not (::skip-repl-special (meta form))))
          opts (merge (c-opts c-state c-env) opts)
+         start-ns (:ns opts)
          {:keys [source] :as start-position} (when (satisfies? IMeta form)
                                                (some-> (meta form) (dec-pos)))
          {:keys [ns] :as result} (if repl-special?
@@ -237,7 +238,8 @@
                                                                                                            :opts           opts
                                                                                                            :start-position start-position})]
                                          (cond-> result
-                                                 (not error) (-> (merge (try {:value (js/eval compiled-js)}
+                                                 (not error) (-> (merge (try {:value (binding [*ns* start-ns]
+                                                                                       (js/eval compiled-js))}
                                                                              (catch js/Error e {:error      e
                                                                                                 :error/kind :eval})))
                                                                  (add-error-position))))
