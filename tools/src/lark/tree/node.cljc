@@ -18,7 +18,7 @@
 
 (defn newline?
   [node]
-  (identical? :newline (get node :tag)))
+  (= :newline (get node :tag)))
 
 (def sexp?
   "Returns false if node does not have corresponding s-expression (eg. comments and whitespace)"

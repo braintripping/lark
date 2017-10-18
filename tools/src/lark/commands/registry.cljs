@@ -19,6 +19,7 @@
   (let [modifier (string/lower-case modifier)]
     (or (case target :Keypress.js (case modifier "m1" "meta"
                                                  "m2" "alt"
+                                                 "m3" (if mac? "ctrl" "command")
                                                  "`" "accent"
                                                  "tilde" "~"
                                                  modifier)
@@ -34,6 +35,7 @@
                                 (case modifier
                                   "m1" (if mac? "⌘" "Ctrl")
                                   "m2" (if mac? "Option" "Alt")
+                                  "m3" (if mac? "Ctrl" "Meta")
                                   "left" "←"
                                   "right" "→"
                                   "up" "↑"
@@ -76,26 +78,40 @@
   [coll x]
   (distinct (conj coll x)))
 
+(defn normalize-binding [binding]
+  (let [{:keys [key-string] :as binding-map} (if (map? binding) binding {:key-string binding})
+        binding-vec (binding-string->vec key-string)]
+    (assoc binding-map :keys (to-array (mapv (partial format-segment :Keypress.js) binding-vec))
+                       :binding-vec binding-vec)))
+
 (defn- add-binding [mappings name binding]
-  (let [binding-vec (binding-string->vec binding)
-        path        [(set binding-vec) :exec]]
+  (let [{:keys [binding-vec event] :as binding-map} (normalize-binding binding)
+        path [(set binding-vec) :exec]]
     (when-not (seq (get-in mappings path))
-      (.register_combo Keypress #js {:keys         (to-array (mapv (partial format-segment :Keypress.js) binding-vec))
-                                     :is_solitary  true
-                                     :is_unordered true
-                                     :on_keydown   #(@handler binding binding-vec)}))
+      (.register_combo Keypress
+                       (clj->js
+                         (merge {;; eg. if we have M1-Shift-K bound and pressed, M1-K should not also activate.
+                                 :is_solitary             true
+
+                                 ;; we don't care what order modifiers are pressed
+                                 :is_unordered            true
+
+                                 (case event :keydown :on_keydown
+                                             :keyup :on_keyup
+                                             :on_keydown) #(@handler binding binding-vec)}
+                                binding-map))))
     (update-in mappings path distinct-conj name)))
 
 (defn- remove-binding [mappings name binding]
-  (let [binding-vec (binding-string->vec binding)
-        path        [(set binding-vec) :exec]
-        mappings    (update-in mappings path seq-disj name)]
+  (let [{:keys [binding-vec keys] :as binding-map} (normalize-binding binding)
+        path     [(set binding-vec) :exec]
+        mappings (update-in mappings path seq-disj name)]
     (when-not (seq (get-in mappings path))
-      (.unregister_combo Keypress #js {:keys (to-array (mapv (partial format-segment :Keypress.js) binding-vec))}))
+      (.unregister_combo Keypress #js {:keys keys}))
     mappings))
 
 (defn bind!
-  "Takes a map of {<command-name>, <binding string>} and registers keybindings."
+  "Takes a map of {<command-name>, <binding>} and registers keybindings."
   [bindings]
   (let [[mappings* commands*] (reduce (fn [[mappings commands] [the-name binding]]
                                         [(add-binding mappings the-name binding)

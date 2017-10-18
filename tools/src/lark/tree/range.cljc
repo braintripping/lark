@@ -47,12 +47,13 @@
                            :column     (- (:end-column node) (count right))
                            :end-column (:end-column node)})))))
 
-(defn inner-range [{:keys [line column end-line end-column tag]}]
-  (when-let [[left right] (get unwrap/edges tag)]
+(defn inner-range [{:keys [line column end-line end-column tag] :as node}]
+  (if-let [[left right] (get unwrap/edges tag)]
     {:line       line
      :column     (+ column (count left))
      :end-line   end-line
-     :end-column (- end-column (count right))}))
+     :end-column (- end-column (count right))}
+    node))
 
 (defn bounds
   "Returns position map for left or right boundary of the node."

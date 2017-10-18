@@ -178,7 +178,6 @@
           (set-editor-cursor! pointer)))))
   true)
 
-
 (def kill!
   (fn [{{pos :pos} :magic/cursor
         zipper     :zipper :as cm}]
@@ -188,22 +187,16 @@
                            (or (not (tree/inside? node pos))
                                (tree/whitespace? node)) (z/up))
           node     (z/node loc)
-          in-edge? (when-let [inner (tree/inner-range node)]
-                     (not (tree/within? inner pos)))
+          in-edge? (when (tree/has-edges? node)
+                     (let [inner (tree/inner-range node)]
+                       (not (tree/within? inner pos))))
           end-node (cond in-edge? nil                       ;; ignore kill when cursor is inside an edge structure, eg. #|""
                          (not (tree/may-contain-children? node)) (tree/inner-range node)
 
-                         :else (let [next-nodes   (->> (z/children loc)
-                                                       (drop-while #(range/lt % pos)))
-                                     next-newline (->> (take-while tree/whitespace? next-nodes)
-                                                       (filter tree/newline?)
-                                                       (first))]
-                                 (or (when next-newline
-                                       (->> (take-while tree/whitespace? next-nodes)
-                                            (last)))
-                                     (->> next-nodes
-                                          (take-while (complement tree/newline?))
-                                          (last)))))]
+                         :else (->> (z/children loc)
+                                    (drop-while #(range/lt (range/bounds % :right) pos))
+                                    (take-while #(<= (:line %) (:line pos)))
+                                    (last)))]
       (when end-node
         (->> (merge pos (select-keys end-node [:end-line :end-column]))
              (cut-range! cm))))

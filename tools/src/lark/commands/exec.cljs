@@ -26,8 +26,7 @@
   [{:keys [modifiers-down which-key/timeout] :as current-state}]
   (some-> timeout
           (js/clearTimeout))
-  (cond-> current-state
-          (empty? modifiers-down) (dissoc :which-key/timeout :which-key/active?)))
+  (dissoc current-state :which-key/timeout :which-key/active?))
 
 (defonce _ (do
              (doseq [modifier ["shift"
