@@ -3,7 +3,7 @@
             [clojure.string :as string]
             [clojure.set :as set]
             [goog.events :as events]
-            ["keypress.js" :refer [keypress]]))
+            ["@braintripping/keypress.js" :refer [keypress]]))
 
 (gobj/set (gobj/get js/window "goog" "events") "listen" events/listen)
 (defonce Keypress (new (.-Listener keypress)))
