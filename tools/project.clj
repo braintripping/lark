@@ -12,7 +12,7 @@
   :dependencies [[org.clojure/clojure "1.9.0-alpha14"]
                  [org.clojure/clojurescript "1.9.671"]
                  [org.clojure/core.match "0.3.0-alpha4"]
-                 [re-view "0.4.1"]
+                 [re-view "0.4.6"]
                  [fast-zip "0.7.0"]
                  [net.cgrand/macrovich "0.2.0"]
                  [lark/backtick "0.1.0"]]

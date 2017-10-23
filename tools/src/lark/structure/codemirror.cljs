@@ -87,9 +87,10 @@
 
 (defn return-to-temp-marker! [editor]
   (when-let [[kind data] (::temp-marker editor)]
-    (case kind :cursor (.setCursor editor (.find data) nil #js {:scroll false})
-               :selections (do
-                               (.setSelections editor data nil #js {:scroll false})))
+    (case kind :cursor (when-let [pos (.find data)]
+                         (.setCursor editor pos nil #js {:scroll false}))
+               :selections (when-let [sels data]
+                               (.setSelections editor sels nil #js {:scroll false})))
     (unset-temp-marker! editor)))
 
 (defn get-cursor [cm]
