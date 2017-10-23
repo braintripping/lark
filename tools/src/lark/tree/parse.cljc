@@ -10,10 +10,11 @@
         [[cljs.tools.reader.reader-types :as r]
          [cljs.tools.reader.edn :as edn]])
     #?@(:clj
-        [[clojure.tools.reader.reader-types :as r]
-         [clojure.tools.reader.edn :as edn]
-         [lark.tree.util :refer [contains-identical-keyword?]]]))
-  #?(:cljs (:require-macros [lark.tree.util :refer [contains-identical-keyword?]])))
+        [
+            [clojure.tools.reader.reader-types :as r]
+            [clojure.tools.reader.edn :as edn]
+            [lark.tree.util :refer [contains-identical-keyword?]]]))
+  #?(:cljs (:require-macros [lark.tree.util :refer [contains-identical-keyword? contains-identical?]])))
 
 #?(:cljs (enable-console-print!))
 
@@ -29,35 +30,35 @@
 
 ;; identical? lookups are 10x faster than set-contains and 2x faster than js-array indexOf
 
-(defn ^boolean newline?
+(defn newline?
   [c]
-  (contains-identical-keyword? [\newline
-                                \return]
-                               c))
+  (contains-identical? [\newline
+                        \return]
+                       c))
 
-(defn ^boolean space?
+(defn space?
   [c]
-  (contains-identical-keyword? [\space
-                                \tab
-                                non-breaking-space]
-                               c))
+  (contains-identical? [\space
+                        \tab
+                        non-breaking-space]
+                       c))
 
-(defn ^boolean whitespace?
+(defn whitespace?
   [c]
-  (or (contains-identical-keyword? [\,
-                                    \space
-                                    \tab
-                                    non-breaking-space]
-                                   c)
+  (or (contains-identical? [\,
+                            \space
+                            \tab
+                            non-breaking-space]
+                           c)
       (newline? c)))
 
-(defn ^boolean boundary?
+(defn boundary?
   [c]
   "Check whether a given char is a token boundary."
-  (contains-identical-keyword? [\" \: \; \' \@ \^ \` \~ \( \) \[ \] \{ \} \\ nil]
-                               c))
+  (contains-identical? [\" \: \; \' \@ \^ \` \~ \( \) \[ \] \{ \} \\ nil]
+                       c))
 
-(defn ^boolean vector-contains?
+(defn vector-contains?
   [v item]
   (let [end (count v)]
     (loop [i 0]
@@ -77,7 +78,7 @@
   [reader]
   (let [c (r/read-char reader)]
     (str c
-         (if ^boolean (not (identical? c \\))
+         (if (not (identical? c \\))
            (read-to-boundary reader #{})
            ""))))
 
@@ -100,9 +101,9 @@
         (identical? c \[) :vector
         (identical? c \{) :map
 
-        (or (identical? c \})
-            (identical? c \])
-            (identical? c \))) :unmatched-delimiter
+        (contains-identical? [\}
+                              \]
+                              \)] c) :unmatched-delimiter
 
         (identical? c \~) :unquote
         (identical? c \') :quote
@@ -119,9 +120,9 @@
   (rd/read-repeatedly reader #(binding [*delimiter* delimiter]
                                 (parse-next %))))
 
-(defn ^boolean printable-only? [n]
-  (contains? #{:space :comma :newline :comment :comment-block}
-             (:tag n)))
+(defn printable-only? [n]
+  (contains-identical-keyword? [:space :comma :newline :comment :comment-block]
+                               (:tag n)))
 
 (defn parse-printables
   [reader node-tag n & [ignore?]]
@@ -142,22 +143,22 @@
   "Parse a single token."
   [reader]
   (let [first-char (r/read-char reader)
-        s          (->> (if ^boolean (identical? first-char \\)
-                          (read-to-char-boundary reader)
-                          (read-to-boundary reader #{}))
-                        (str first-char))
+        s (->> (if (identical? first-char \\)
+                 (read-to-char-boundary reader)
+                 (read-to-boundary reader #{}))
+               (str first-char))
         ;; determine if string is a symbol, inferring 'yes' on a
         ;; symbol-related read error:
-        sexp       (try (edn/read-string s)
-                        (catch #?(:cljs js/Error
-                                  :clj  Exception) e
-                          (let [message #?(:cljs (ex-message e)
-                                           :clj (.getMessage e))]
-                            ;; TODO
-                            ;; a better way to determine that this is an invalid symbol?
-                            (when (string/ends-with? message "/.")
-                              ::invalid-symbol))))
-        is-symbol  ^boolean (or (symbol? sexp) (= sexp ::invalid-symbol))]
+        sexp (try (edn/read-string s)
+                  (catch #?(:cljs js/Error
+                            :clj  Exception) e
+                    (let [message #?(:cljs (ex-message e)
+                                     :clj  (.getMessage e))]
+                      ;; TODO
+                      ;; a better way to determine that this is an invalid symbol?
+                      (when (string/ends-with? message "/.")
+                        ::invalid-symbol))))
+        is-symbol (or (symbol? sexp) (= sexp ::invalid-symbol))]
     (if is-symbol
       [:symbol (str s (read-to-boundary reader #{\' \:}))]
       [:token s])))
@@ -166,7 +167,7 @@
   [reader]
   (r/read-char reader)
   (if-let [c (r/peek-char reader)]
-    (if ^boolean (identical? c \:)
+    (if (identical? c \:)
       [:namespaced-keyword (edn/read reader)]
       (do (r/unread reader \:)
           ;; TODO
@@ -188,16 +189,16 @@
     \? (do
          (r/read-char reader)
          (let [read-next #(parse-printables reader :reader-macro 1)
-               opts      (case (r/peek-char reader)
-                           \( {:prefix  "#?"
-                               :splice? true}
-                           \@ (do (r/read-char reader)
-                                  {:prefix  "#?@"
-                                   :splice? true})
-                           ;; no idea what this would be, but its \? prefixed
-                           (do (rd/unread reader \?)
-                               {:prefix (str "#?" (read-next))}))
-               value     (read-next)]
+               opts (case (r/peek-char reader)
+                      \( {:prefix  "#?"
+                          :splice? true}
+                      \@ (do (r/read-char reader)
+                             {:prefix  "#?@"
+                              :splice? true})
+                      ;; no idea what this would be, but its \? prefixed
+                      (do (rd/unread reader \?)
+                          {:prefix (str "#?" (read-next))}))
+               value (read-next)]
            [:reader-conditional value opts]))
     [:reader-macro (parse-printables reader :reader-macro 2)]))
 
@@ -205,39 +206,13 @@
   [reader]
   (r/read-char reader)
   (let [c (r/peek-char reader)]
-    (if ^boolean (identical? c \@)
+    (if (identical? c \@)
       [:unquote-splicing (parse-printables reader :unquote 1 true)]
       [:unquote (parse-printables reader :unquote 1)])))
 
-#_(defn parse-comment-block [reader opening-newline?]
-    [:comment-block (loop [text (if opening-newline? \newline "")]
-                      (rd/read-while reader #{\;})
-                      (when (space? (r/peek-char reader))
-                        (r/read-char reader))
-
-                      (let [comment-line    (rd/read-until reader #(or (nil? %)
-                                                                       (identical? % \newline)
-                                                                       (identical? % \return)))
-                            next-whitespace (loop [whitespace nil]
-                                              (let [next-char (r/peek-char reader)]
-                                                (if (whitespace? next-char)
-                                                  (do (r/read-char reader)
-                                                      (recur (str whitespace next-char)))
-                                                  whitespace)))
-                            next-comment?   (and next-whitespace
-                                                 (not (space? (last next-whitespace)))
-                                                 (= \; (r/peek-char reader)))]
-                        (if next-comment?
-                          (recur (str text comment-line next-whitespace))
-                          (do
-                            (when next-whitespace
-                              (doseq [c (reverse next-whitespace)]
-                                (r/unread reader c)))
-                            (str text comment-line)))))])
-
 (defn parse-next*
   [reader]
-  (let [c   (r/peek-char reader)
+  (let [c (r/peek-char reader)
         tag (dispatch c)]
     (case tag
       :token (parse-token reader)
@@ -245,9 +220,7 @@
       :sharp (parse-sharp reader)
       :comment (do (rd/ignore reader)
                    [tag (let [content (rd/read-until reader (fn [x] (or (nil? x) (#{\newline \return} x))))]
-                          content
-                          #_(cond-> content
-                                    (newline? (r/peek-char reader)) (str (r/read-char reader))))])
+                          content)])
       (:deref
         :quote
         :syntax-quote) [tag (parse-printables reader tag 1 true)]
@@ -315,10 +288,10 @@
   ([ns source]
    (let [{out-str :source :as the-ast} (ast* source)
          modified-source? (not= source out-str)
-         result           (assoc (if modified-source?
-                                   (ast* out-str)
-                                   the-ast) :string out-str
-                                            :modified-source? modified-source?)]
+         result (assoc (if modified-source?
+                         (ast* out-str)
+                         the-ast) :string out-str
+                                  :modified-source? modified-source?)]
      result)))
 
 (defn normalize-comment-line [s]
@@ -334,7 +307,7 @@
 
   (defn conj-while [[out in] xform]
     (loop [out out
-           in  in]
+           in in]
       (if-let [form (xform (peek in))]
         (recur (update-in out [(dec (count out)) :value] conj form)
                (subvec in 1))
