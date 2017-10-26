@@ -298,7 +298,9 @@
           sel
           (let [node        (z/node loc)
                 inner-range (when (tree/has-edges? node)
-                              (tree/inner-range node))]
+                              (let [range (tree/inner-range node)]
+                                (when-not (tree/empty-range? range)
+                                  range)))]
             (cond (range/pos= sel inner-range) (select! node)
                   (some-> inner-range
                           (tree/within? sel)) (select! inner-range)

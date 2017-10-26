@@ -58,14 +58,6 @@
   (contains-identical? [\" \: \; \' \@ \^ \` \~ \( \) \[ \] \{ \} \\ nil]
                        c))
 
-(defn vector-contains?
-  [v item]
-  (let [end (count v)]
-    (loop [i 0]
-      (cond (= i end) false
-            (identical? (v i) item) true
-            :else (recur (inc i))))))
-
 (defn read-to-boundary
   [reader allowed]
   (rd/read-until
@@ -257,7 +249,7 @@
   "Create reader for strings."
   [s]
   (r/indexing-push-back-reader
-    (r/string-push-back-reader s 500)))
+    (r/string-push-back-reader s )))
 
 (defn comment-block-child? [{:keys [tag]}]
   (contains-identical-keyword? [:space :newline :comment] tag))
@@ -339,13 +331,6 @@
                                                        :value (normalize-comment-line (emit/string node))})))
                                    (conj out node))) [] nodes))))
 
-#_(defn flatten-comment-blocks [ast]
-    (update ast :value (fn [nodes]
-                         (mapv (fn [{:keys [value tag] :as node}]
-                                 (if (= :comment-block tag)
-                                   (assoc node :value (string/join (mapv emit/string value)))
-                                   node)) nodes))))
-
 (defn shape [{:keys [tag value] :as node}]
   (if (= tag :base)
     (mapv shape value)
@@ -358,4 +343,3 @@
     (prn s)
     (prn (emit/string (ast s)))
     (= s (emit/string (ast s)))))
-
