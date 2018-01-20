@@ -119,7 +119,10 @@
                               [:div]
                               [:div]]]
                    :error [:div.pa3.bg-darken-red.br2
-                           (message this)]
+                           (or (message this)
+                               [:.circle-error
+                                [:div]
+                                [:div]])]
                    nil)))
 
 (defn default-view [self]

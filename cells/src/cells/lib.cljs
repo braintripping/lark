@@ -120,7 +120,9 @@
      (xhr/send url (cell-fn [event]
                             (let [xhrio (.-target event)]
                               (if-not (.isSuccess xhrio)
-                                (status! self :error (-> xhrio .getLastErrorCode (errors/getDebugMessage)))
+                                (status! self :error (str (-> xhrio .getLastErrorCode (errors/getDebugMessage))
+                                                          \newline
+                                                          "(check your browser console for more details)"))
                                 (let [formatted-value (-> xhrio (.getResponseText) (parse))]
                                   (status! self nil)
                                   (reset! self formatted-value))))))
