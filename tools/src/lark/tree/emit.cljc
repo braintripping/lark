@@ -102,7 +102,7 @@
 (defn wrap-children [node left right children]
   (binding [*indent-level* (depth-inc node left)]
     (str left (apply str (mapv string children)) (when-not (= (:tag (last children))
-                                                              :error/missing-delimiter)
+                                                              :error/eof)
                                                    right))))
 
 #_(defn children? [{:keys [tag]}]
