@@ -1,4 +1,4 @@
-(defproject lark/cells "0.1.7"
+(defproject lark/cells "0.1.8-SNAPSHOT"
 
   :description "Interactive async in ClojureScript."
 
