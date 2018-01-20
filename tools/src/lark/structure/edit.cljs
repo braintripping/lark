@@ -212,6 +212,11 @@
              (cut-range! cm))))
     true))
 
+(defn boundary? [s]
+  (some->> (last s)
+           (.indexOf "\"()[]{} ")
+           (pos?)))
+
 (defn unwrap! [{{:keys [pos bracket-loc bracket-node]} :magic/cursor :as cm}]
   (when (and bracket-loc (not (cm/selection? cm)))
     (when-let [closest-edges-node (loop [loc (cond-> bracket-loc
@@ -222,10 +227,20 @@
       (let [pos (cm/get-cursor cm)
             [l r] (tree/edges closest-edges-node)]
         (operation cm
-                   (cm/replace-range! cm (str (spaces (count l))
-                                              (cm/range-text cm (tree/inner-range closest-edges-node))
-                                              (spaces (count r)))
-                                      closest-edges-node)
+                   (let [inner-text (cm/range-text cm (tree/inner-range closest-edges-node))
+
+                         ;; if the inner-text ends in a non-boundary character,
+                         ;; add padding to avoid merging symbols.
+                         ;; TODO
+                         ;; a more principled approach
+                         pad-right? (some-> (last inner-text)
+                                            (boundary?)
+                                            (not))]
+                     (cm/replace-range! cm (str (spaces (count l))
+                                                inner-text
+                                                (when pad-right?
+                                                  (spaces (count r))))
+                                        closest-edges-node))
                    (cm/set-cursor! cm pos)))
 
       true))
