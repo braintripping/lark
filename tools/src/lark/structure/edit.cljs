@@ -25,8 +25,8 @@
   "Copy text to clipboard using a hidden input element."
   [text]
   (let [hadFocus (.-activeElement js/document)
-        text     (string/replace text #"[\n\r]" "<br/>")
-        _        (aset (clipboard-helper-element) "innerHTML" text)]
+        text (string/replace text #"[\n\r]" "<br/>")
+        _ (aset (clipboard-helper-element) "innerHTML" text)]
     (doto (Range/createFromNodeContents (clipboard-helper-element))
       (.select))
     (try (.execCommand js/document "copy")
@@ -55,14 +55,15 @@
                          (filter (comp (complement tree/whitespace?)
                                        z/node))
                          (first)))]
-    (loop [loc loc]
-      (let [node (z/node loc)]
-        (if (and (not (tree/whitespace? node))
-                 (not= pos (tree/bounds node side)))
-          (tree/bounds (z/node loc) side)
-          (if-let [loc (next-loc loc)]
-            (recur loc)
-            (some->> (z/up loc) recur)))))))
+    (when-not (:errors cm)
+      (loop [loc loc]
+        (let [node (z/node loc)]
+          (if (and (not (tree/whitespace? node))
+                   (not= pos (tree/bounds node side)))
+            (tree/bounds (z/node loc) side)
+            (if-let [loc (next-loc loc)]
+              (recur loc)
+              (some->> (z/up loc) recur))))))))
 
 (defn cursor-skip!
   "Returns function for moving cursor left or right, touching only node boundaries."
@@ -107,14 +108,14 @@
                        (- (-> (.. change -to -line)
                               (- (.. change -from -line))))
                        (- 1))
-              ch   (cond-> (.-ch pos)
-                           (= (.-line pos) (.. change -to -line)) (+ (-> (.-ch (cm/changeEnd change))
-                                                                         (- (.. change -to -ch)))))]
+              ch (cond-> (.-ch pos)
+                         (= (.-line pos) (.. change -to -line)) (+ (-> (.-ch (cm/changeEnd change))
+                                                                       (- (.. change -to -ch)))))]
           (cm/Pos line ch))))
 
 (defn adjust-for-changes [pos changes]
   (loop [pos pos
-         i   0]
+         i 0]
     (if (= i (.-length changes))
       pos
       (recur (adjust-for-change pos (aget changes i))
@@ -143,7 +144,7 @@
   (move-while [this i pred]
     (loop [the-pos pos]
       (let [next-pos (move-char editor the-pos i)
-            char     (char-at editor next-pos)]
+            char (char-at editor next-pos)]
         (if (and (pred char) (not (.-hitSide next-pos)))
           (recur next-pos)
           (do (set! pos the-pos)
@@ -166,50 +167,52 @@
                (recur pred)))))
 
 (defn uneval! [{:keys [zipper] :as cm}]
-  (let [selection-bounds (cm/current-selection-bounds cm)]
-    (when-let [loc (->> (tree/node-at zipper (tree/bounds selection-bounds :left))
-                        (cm/cursor-loc (:pos (:magic/cursor cm)))
-                        (closest-left (complement tree/whitespace?)))]
-      (let [node     (z/node loc)
-            replace! (fn [target-loc items uneval?]
-                       (let [string (tree/string {:tag   (if uneval? :uneval :base)
-                                                  :value items})]
-                         (cm/replace-range! cm string (z/node target-loc)))
-                       true)]
-        (let [pointer (pointer cm)
-              changes (operation cm
-                                 (or (and (= :uneval (:tag node))
-                                          (replace! loc (:value node) false)
-                                          true)
-                                     (and (= :uneval (some-> (z/up loc) (z/node) :tag))
-                                          (replace! (z/up loc) (:value (z/node (z/up loc))) false))
-                                     (replace! loc [node] true)))]
-          (adjust-for-changes! pointer changes)
-          (set-editor-cursor! pointer)))))
+  (when-not (:errors cm)
+    (let [selection-bounds (cm/current-selection-bounds cm)]
+      (when-let [loc (->> (tree/node-at zipper (tree/bounds selection-bounds :left))
+                          (cm/cursor-loc (:pos (:magic/cursor cm)))
+                          (closest-left (complement tree/whitespace?)))]
+        (let [node (z/node loc)
+              replace! (fn [target-loc items uneval?]
+                         (let [string (tree/string {:tag   (if uneval? :uneval :base)
+                                                    :value items})]
+                           (cm/replace-range! cm string (z/node target-loc)))
+                         true)]
+          (let [pointer (pointer cm)
+                changes (operation cm
+                                   (or (and (= :uneval (:tag node))
+                                            (replace! loc (:value node) false)
+                                            true)
+                                       (and (= :uneval (some-> (z/up loc) (z/node) :tag))
+                                            (replace! (z/up loc) (:value (z/node (z/up loc))) false))
+                                       (replace! loc [node] true)))]
+            (adjust-for-changes! pointer changes)
+            (set-editor-cursor! pointer))))))
   true)
 
 (def kill!
   (fn [{{pos :pos} :magic/cursor
         zipper     :zipper :as cm}]
-    (let [loc      (tree/node-at zipper pos)
-          node     (z/node loc)
-          loc      (cond-> loc
-                           (or (not (tree/inside? node pos))
-                               (tree/whitespace? node)) (z/up))
-          node     (z/node loc)
-          in-edge? (when (tree/has-edges? node)
-                     (let [inner (tree/inner-range node)]
-                       (not (tree/within? inner pos))))
-          end-node (cond in-edge? nil                       ;; ignore kill when cursor is inside an edge structure, eg. #|""
-                         (not (tree/may-contain-children? node)) (tree/inner-range node)
+    (when-not (:errors cm)
+      (let [loc (tree/node-at zipper pos)
+            node (z/node loc)
+            loc (cond-> loc
+                        (or (not (tree/inside? node pos))
+                            (tree/whitespace? node)) (z/up))
+            node (z/node loc)
+            in-edge? (when (tree/has-edges? node)
+                       (let [inner (tree/inner-range node)]
+                         (not (tree/within? inner pos))))
+            end-node (cond in-edge? nil                     ;; ignore kill when cursor is inside an edge structure, eg. #|""
+                           (not (tree/may-contain-children? node)) (tree/inner-range node)
 
-                         :else (->> (z/children loc)
-                                    (drop-while #(range/lt (range/bounds % :right) pos))
-                                    (take-while #(<= (:line %) (:line pos)))
-                                    (last)))]
-      (when end-node
-        (->> (merge pos (select-keys end-node [:end-line :end-column]))
-             (cut-range! cm))))
+                           :else (->> (z/children loc)
+                                      (drop-while #(range/lt (range/bounds % :right) pos))
+                                      (take-while #(<= (:line %) (:line pos)))
+                                      (last)))]
+        (when end-node
+          (->> (merge pos (select-keys end-node [:end-line :end-column]))
+               (cut-range! cm)))))
     true))
 
 (defn boundary? [s]
@@ -218,65 +221,70 @@
            (pos?)))
 
 (defn unwrap! [{{:keys [pos bracket-loc bracket-node]} :magic/cursor :as cm}]
-  (when (and bracket-loc (not (cm/selection? cm)))
-    (when-let [closest-edges-node (loop [loc (cond-> bracket-loc
-                                                     (not (tree/inside? bracket-node pos)) (z/up))]
-                                    (cond (not loc) nil
-                                          (tree/has-edges? (z/node loc)) (z/node loc)
-                                          :else (recur (z/up loc))))]
-      (let [pos (cm/get-cursor cm)
-            [l r] (tree/edges closest-edges-node)]
-        (operation cm
-                   (let [inner-text (cm/range-text cm (tree/inner-range closest-edges-node))
+  (when-not (:errors cm)
+    (when (and bracket-loc (not (cm/selection? cm)))
+      (when-let [closest-edges-node (loop [loc (cond-> bracket-loc
+                                                       (not (tree/inside? bracket-node pos)) (z/up))]
+                                      (cond (not loc) nil
+                                            (tree/has-edges? (z/node loc)) (z/node loc)
+                                            :else (recur (z/up loc))))]
+        (let [pos (cm/get-cursor cm)
+              [l r] (tree/edges closest-edges-node)]
+          (operation cm
+                     (let [inner-text (cm/range-text cm (tree/inner-range closest-edges-node))
 
-                         ;; if the inner-text ends in a non-boundary character,
-                         ;; add padding to avoid merging symbols.
-                         ;; TODO
-                         ;; a more principled approach
-                         pad-right? (some-> (last inner-text)
-                                            (boundary?)
-                                            (not))]
-                     (cm/replace-range! cm (str (spaces (count l))
-                                                inner-text
-                                                (when pad-right?
-                                                  (spaces (count r))))
-                                        closest-edges-node))
-                   (cm/set-cursor! cm pos)))
+                           ;; if the inner-text ends in a non-boundary character,
+                           ;; add padding to avoid merging symbols.
+                           ;; TODO
+                           ;; a more principled approach
+                           pad-right? (some-> (last inner-text)
+                                              (boundary?)
+                                              (not))]
+                       (cm/replace-range! cm (str (spaces (count l))
+                                                  inner-text
+                                                  (when pad-right?
+                                                    (spaces (count r))))
+                                          closest-edges-node))
+                     (cm/set-cursor! cm pos)))
 
-      true))
+        true)))
   true)
 
 (defn raise! [{{:keys [pos bracket-loc bracket-node]} :magic/cursor :as cm}]
   ;; TODO
   ;; highlight bracket node for raise
-  (when (and bracket-loc (z/up bracket-loc))
-    (let [up (z/node (z/up bracket-loc))]
-      (operation cm
-                 (cm/replace-range! cm (tree/string bracket-node) up)
-                 (cm/set-cursor! cm (tree/bounds up :left)))))
+  (when-not (:errors cm)
+    (when (and bracket-loc (z/up bracket-loc))
+      (let [up (z/node (z/up bracket-loc))]
+        (operation cm
+                   (cm/replace-range! cm (tree/string bracket-node) up)
+                   (cm/set-cursor! cm (tree/bounds up :left))))))
   true)
 
 (def copy-form
   (fn [cm] (if (cm/selection? cm)
              :lark.commands/Pass
-             (copy-range! cm (get-in cm [:magic/cursor :bracket-node])))))
+             (when-not (:errors cm)
+               (copy-range! cm (get-in cm [:magic/cursor :bracket-node]))))))
 
 (def cut-form
   (fn [cm] (if (cm/selection? cm)
              :lark.commands/Pass
-             (cut-range! cm (get-in cm [:magic/cursor :bracket-node])))))
+             (when-not (:errors cm)
+               (cut-range! cm (get-in cm [:magic/cursor :bracket-node]))))))
 
 (def delete-form
   (fn [cm] (if (cm/selection? cm)
              :lark.commands/Pass
-             (cm/replace-range! cm "" (get-in cm [:magic/cursor :bracket-node])))))
+             (when-not (:errors cm)
+               (cm/replace-range! cm "" (get-in cm [:magic/cursor :bracket-node]))))))
 
 (defn pop-stack! [cm]
   (when-let [stack (get-in cm [:magic/cursor :stack])]
     (let [stack (cond-> stack
                         (or (:base (first stack))
                             (= (cm/current-selection-bounds cm) (first stack))) rest)
-          item  (first stack)]
+          item (first stack)]
       (swap! cm update-in [:magic/cursor :stack] (if (tree/empty-range? item)
                                                    empty rest))
       item)))
@@ -300,76 +308,85 @@
 (def expand-selection
   (fn [{zipper :zipper
         :as    cm}]
-    (let [sel         (cm/current-selection-bounds cm)
-          loc         (tree/node-at zipper sel)
-          select!     (partial tracked-select cm)
-          cursor-root (cm/temp-marker-cursor-pos cm)
-          selection?  (cm/selection? cm)]
-      (when (or cursor-root (not selection?))
-        (push-cursor! cm)
-        (push-stack! cm (cm/current-selection-bounds cm)))
-      (loop [loc loc]
-        (if-not loc
-          sel
-          (let [node        (z/node loc)
-                inner-range (when (tree/has-edges? node)
-                              (let [range (tree/inner-range node)]
-                                (when-not (tree/empty-range? range)
-                                  range)))]
-            (cond (range/pos= sel inner-range) (select! node)
-                  (some-> inner-range
-                          (tree/within? sel)) (select! inner-range)
-                  (range/pos= sel node) (recur (z/up loc))
-                  (tree/within? node sel) (select! node)
-                  :else (recur (z/up loc)))))))
+    (when-not (:errors cm)
+      (let [sel (cm/current-selection-bounds cm)
+            loc (tree/node-at zipper sel)
+            select! (partial tracked-select cm)
+            cursor-root (cm/temp-marker-cursor-pos cm)
+            selection? (cm/selection? cm)]
+        (when (or cursor-root (not selection?))
+          (push-cursor! cm)
+          (push-stack! cm (cm/current-selection-bounds cm)))
+        (loop [loc loc]
+          (if-not loc
+            sel
+            (let [node (z/node loc)
+                  inner-range (when (tree/has-edges? node)
+                                (let [range (tree/inner-range node)]
+                                  (when-not (tree/empty-range? range)
+                                    range)))]
+              (cond (range/pos= sel inner-range) (select! node)
+                    (some-> inner-range
+                            (tree/within? sel)) (select! inner-range)
+                    (range/pos= sel node) (recur (z/up loc))
+                    (tree/within? node sel) (select! node)
+                    :else (recur (z/up loc))))))))
     true))
 
 (def shrink-selection
   (fn [cm]
-    (some->> (pop-stack! cm)
-             (cm/select-range cm))
-    true))
+    (when-not (:errors cm)
+      (some->> (pop-stack! cm)
+               (cm/select-range cm))
+      true)))
 
 (defn expand-selection-x [{zipper :zipper
                            :as    cm} direction]
-  (let [selection-bounds (cm/current-selection-bounds cm)
-        selection-loc    (tree/node-at zipper (tree/bounds selection-bounds direction))
-        selection-node   (z/node selection-loc)
-        cursor-root      (cm/temp-marker-cursor-pos cm)]
-    (when cursor-root
-      (push-cursor! cm)
-      (push-stack! cm selection-bounds))
-    (if (and (tree/has-edges? selection-node)
-             (= (tree/bounds selection-bounds direction)
-                (tree/bounds (tree/inner-range selection-node) direction)))
-      (expand-selection cm)
+  (when-not (:errors cm)
+    (let [selection-bounds (cm/current-selection-bounds cm)
+          selection-loc (tree/node-at zipper (tree/bounds selection-bounds direction))
+          selection-node (z/node selection-loc)
+          cursor-root (cm/temp-marker-cursor-pos cm)]
+      (when cursor-root
+        (push-cursor! cm)
+        (push-stack! cm selection-bounds))
+      (if (and (tree/has-edges? selection-node)
+               (= (tree/bounds selection-bounds direction)
+                  (tree/bounds (tree/inner-range selection-node) direction)))
+        (expand-selection cm)
 
-      (if-let [adjacent-loc (first (filter (comp (complement tree/whitespace?) z/node) ((case direction :right tree/right-locs
-                                                                                                        :left tree/left-locs) selection-loc)))]
-        (tracked-select cm (merge (z/node adjacent-loc)
-                                  (case direction :right (tree/bounds selection-bounds :left)
-                                                  :left (tree/shift-end (tree/bounds selection-bounds :right)))))
-        (expand-selection cm))))
+        (if-let [adjacent-loc (first (filter (comp (complement tree/whitespace?) z/node) ((case direction :right tree/right-locs
+                                                                                                          :left tree/left-locs) selection-loc)))]
+          (tracked-select cm (merge (z/node adjacent-loc)
+                                    (case direction :right (tree/bounds selection-bounds :left)
+                                                    :left (tree/shift-end (tree/bounds selection-bounds :right)))))
+          (expand-selection cm)))))
   true)
 
 (def backspace! #(.execCommand % "delCharBefore"))
 
-(def comment-line
-  (fn [{zipper :zipper :as cm}]
-    (operation cm
-               (let [{line-n :line column-n :column} (get-in cm [:magic/cursor :pos])
-                     [spaces semicolons] (rest (re-find #"^(\s*)(;+)?" (.getLine cm line-n)))
-                     [space-n semicolon-n] (map count [spaces semicolons])]
-                 (if (> semicolon-n 0)
-                   (cm/replace-range! cm "" {:line line-n :column space-n :end-column (+ space-n semicolon-n)})
-                   (let [{:keys [end-line end-column]} (some-> (tree/node-at zipper {:line line-n :column 0})
-                                                               z/up
-                                                               z/node)]
-                     (when (= line-n end-line)
-                       (cm/replace-range! cm (str "\n" spaces) {:line line-n :column (dec end-column)}))
-                     (cm/replace-range! cm ";;" {:line line-n :column space-n})))
-                 (.setCursor cm (cm/Pos (inc line-n) column-n))))
-    true))
+(defn comment-line
+  ([cm]
+   (operation
+    cm
+    (if (cm/selection? cm)
+      (let [sel (aget (.listSelections cm) 0)
+            [start end] (sort [(.. sel -anchor -line)
+                               (.. sel -head -line)])]
+        (doseq [line-n (range start (inc end))]
+          (comment-line cm line-n)))
+      (comment-line cm (.-line (cm/get-cursor cm))))))
+  ([cm line-n]
+   (let [[spaces semicolons] (rest (re-find #"^(\s*)(;+)?" (.getLine cm line-n)))
+         [space-n semicolon-n] (map count [spaces semicolons])]
+     (if (> semicolon-n 0)
+       (cm/replace-range! cm "" {:line       line-n
+                                 :column     space-n
+                                 :end-column (+ space-n semicolon-n)})
+       (cm/replace-range! cm ";;" {:line       line-n
+                                   :column     space-n
+                                   :end-column space-n})))
+   true))
 
 (defn slurp-parent? [node pos]
   (and (or (= :string (:tag node))
@@ -379,47 +396,49 @@
 (def slurp-forward
   (fn [{{:keys [loc pos]} :magic/cursor
         :as               cm}]
-    (let [node           (z/node loc)
-          end-edge-loc   (cond-> loc
+    (when-not (:errors cm)
+      (let [node (z/node loc)
+            end-edge-loc (cond-> loc
                                  (not (slurp-parent? node pos)) z/up)
-          start-edge-loc (tree/include-prefix-parents end-edge-loc)
-          {:keys [tag] :as node} (z/node start-edge-loc)]
-      (when (and node (not= :base tag))
-        (when-let [next-form (some->> (tree/right-locs start-edge-loc)
-                                      (filter (comp tree/sexp? z/node))
-                                      first
-                                      (z/node))]
-          (operation cm (let [right-bracket (second (tree/edges (z/node end-edge-loc)))]
-                          (cm/replace-range! cm (or right-bracket "") (tree/bounds next-form :right))
-                          (cm/replace-range! cm "" (-> (tree/bounds node :right)
-                                                       (assoc :end-column (dec (:end-column node))))))))))
+            start-edge-loc (tree/include-prefix-parents end-edge-loc)
+            {:keys [tag] :as node} (z/node start-edge-loc)]
+        (when (and node (not= :base tag))
+          (when-let [next-form (some->> (tree/right-locs start-edge-loc)
+                                        (filter (comp tree/sexp? z/node))
+                                        first
+                                        (z/node))]
+            (operation cm (let [right-bracket (second (tree/edges (z/node end-edge-loc)))]
+                            (cm/replace-range! cm (or right-bracket "") (tree/bounds next-form :right))
+                            (cm/replace-range! cm "" (-> (tree/bounds node :right)
+                                                         (assoc :end-column (dec (:end-column node)))))))))))
     true))
 
 (def unslurp-forward
   (fn [{{:keys [loc pos]} :magic/cursor
         :as               cm}]
-    (let [node          (z/node loc)
-          end-edge-loc  (cond-> loc
-                                (or (= :string (:tag node))
-                                    (not (slurp-parent? node pos))) z/up)
-          end-edge-node (some-> end-edge-loc z/node)]
-      (when (and end-edge-node (not= :base (:tag end-edge-node)))
-        (let [inner-forms (some->> (z/children end-edge-loc)
-                                   (filter tree/sexp?)
-                                   (reverse))]
-          (when-let [last-inner-form (first inner-forms)]
-            (operation cm (let [right-bracket (second (tree/edges end-edge-node))
-                                range         (merge (or (some-> (second inner-forms)
-                                                                 (tree/bounds :right))
-                                                         (tree/bounds last-inner-form :left))
-                                                     (select-keys end-edge-node [:end-line :end-column]))
-                                add-padding?  (not= " " (char-at cm (cm/range->Pos
+    (when-not (:errors cm)
+      (let [node (z/node loc)
+            end-edge-loc (cond-> loc
+                                 (or (= :string (:tag node))
+                                     (not (slurp-parent? node pos))) z/up)
+            end-edge-node (some-> end-edge-loc z/node)]
+        (when (and end-edge-node (not= :base (:tag end-edge-node)))
+          (let [inner-forms (some->> (z/children end-edge-loc)
+                                     (filter tree/sexp?)
+                                     (reverse))]
+            (when-let [last-inner-form (first inner-forms)]
+              (operation cm (let [right-bracket (second (tree/edges end-edge-node))
+                                  range (merge (or (some-> (second inner-forms)
+                                                           (tree/bounds :right))
+                                                   (tree/bounds last-inner-form :left))
+                                               (select-keys end-edge-node [:end-line :end-column]))
+                                  add-padding? (not= " " (char-at cm (cm/range->Pos
                                                                       (update (transpose-bounds range :end->start)
                                                                               :column inc))))]
-                            (cm/replace-range! cm (str right-bracket " " (tree/string last-inner-form)
-                                                       (when add-padding? " "))
-                                               range)
-                            (cm/set-cursor! cm pos)))))))
+                              (cm/replace-range! cm (str right-bracket " " (tree/string last-inner-form)
+                                                         (when add-padding? " "))
+                                                 range)
+                              (cm/set-cursor! cm pos))))))))
     true))
 
 
@@ -429,9 +448,9 @@
   true)
 
 (defn cursor-line-edge [editor side]
-  (let [cursor  (cm/get-cursor editor)
-        line-i  (.-line cursor)
-        line    (.getLine editor line-i)
+  (let [cursor (cm/get-cursor editor)
+        line-i (.-line cursor)
+        line (.getLine editor line-i)
         padding (count (second (re-find (case side :left #"^(\s+).*"
                                                    :right #".*?(\s+)$") line)))]
     (cm/set-cursor! editor (cm/Pos line-i (case side :left padding

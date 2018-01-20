@@ -1,16 +1,16 @@
 (ns lark.structure.codemirror
   (:require
-    ["codemirror" :as CM]
-    [fast-zip.core :as z]
-    [goog.events :as events]
-    [lark.tree.core :as tree]
-    [goog.dom :as gdom]
-    [goog.object :as gobj]
+   ["codemirror" :as CM]
+   [fast-zip.core :as z]
+   [goog.events :as events]
+   [lark.tree.core :as tree]
+   [goog.dom :as gdom]
+   [goog.object :as gobj]
 
-    ;; for protocols:
-    [lark.editor :as Editor]
-    ;; for M1 modifier differentiation
-    [lark.commands.registry :as registry]))
+   ;; for protocols:
+   [lark.editor :as Editor]
+   ;; for M1 modifier differentiation
+   [lark.commands.registry :as registry]))
 
 (def ^:dynamic *get-ns* (fn [] (symbol "cljs.user")))
 
@@ -90,10 +90,10 @@
     (case kind :cursor (when-let [pos (.find data)]
                          (.setCursor editor pos nil #js {:scroll false}))
                :selections (when-let [sels data]
-                               (.setSelections editor sels nil #js {:scroll false})))
+                             (.setSelections editor sels nil #js {:scroll false})))
     (unset-temp-marker! editor)))
 
-(defn get-cursor [cm]
+(defn ^js get-cursor [cm]
   (or (temp-marker-cursor-pos cm)
       (.getCursor cm)))
 
@@ -188,7 +188,7 @@
 
 (defn select-at-cursor [{{:keys [bracket-loc]} :magic/cursor :as cm} top-loc?]
   (when bracket-loc
-    (let [pos  (Pos->range (get-cursor cm))
+    (let [pos (Pos->range (get-cursor cm))
           node (if top-loc? (z/node (tree/top-loc bracket-loc))
                             (highlight-range pos (z/node bracket-loc)))]
       (when (and node (not (tree/whitespace? node)))
@@ -221,7 +221,7 @@
         ;; TODO
         ;; derive className from error name, not all errors are unmatched brackets.
         ;; (somehow) add a tooltip or other attribute to the marker (for explanation).
-        handles      (mark-ranges! cm error-ranges #js {:className "CodeMirror-unmatchedBracket"})]
+        handles (mark-ranges! cm error-ranges #js {:className "CodeMirror-unmatchedBracket"})]
     (swap! cm assoc-in [:magic/errors :handles] handles)))
 
 (defn update-ast!
@@ -239,7 +239,9 @@
         (when-let [error (first errors)]
           (highlight-parse-errors! cm [error]))
         (if (seq errors)
-          (swap! cm dissoc :ast :zipper)
+          (swap! cm merge {:ast    nil
+                           :zipper nil
+                           :errors errors})
           (swap! cm assoc
                  :ast next-ast
                  :zipper next-zip))))))
@@ -253,7 +255,7 @@
       (when (or (not= pos prev-pos)
                 (not= prev-zipper zipper))
         (when-let [loc (some-> zipper (tree/node-at pos))]
-          (let [bracket-loc  (cursor-loc pos loc)
+          (let [bracket-loc (cursor-loc pos loc)
                 bracket-node (z/node bracket-loc)]
             (when brackets? (match-brackets! cm bracket-node))
             (swap! cm update :magic/cursor merge {:loc          loc

@@ -6,11 +6,11 @@
             [lark.tree.emit :as emit]
             [lark.tree.node :as n]
             [clojure.string :as string]
-    #?@(:cljs
-        [[cljs.tools.reader.reader-types :as r]
-         [cljs.tools.reader.edn :as edn]])
-    #?@(:clj
-        [
+   #?@(:cljs
+       [[cljs.tools.reader.reader-types :as r]
+        [cljs.tools.reader.edn :as edn]])
+   #?@(:clj
+       [
             [clojure.tools.reader.reader-types :as r]
             [clojure.tools.reader.edn :as edn]
             [lark.tree.util :refer [contains-identical-keyword?]]]))
@@ -61,10 +61,10 @@
 (defn read-to-boundary
   [reader allowed]
   (rd/read-until
-    reader
-    #(and (or (whitespace? %)
-              (boundary? %))
-          (not (allowed %)))))
+   reader
+   #(and (or (whitespace? %)
+             (boundary? %))
+         (not (allowed %)))))
 
 (defn read-to-char-boundary
   [reader]
@@ -121,11 +121,11 @@
   (when-not (nil? ignore?)
     (r/read-char reader))
   (rd/read-n
-    reader
-    node-tag
-    parse-next
-    (complement printable-only?)
-    n))
+   reader
+   node-tag
+   parse-next
+   (complement printable-only?)
+   n))
 
 (def brackets {\( \)
                \[ \]
@@ -214,8 +214,8 @@
                    [tag (let [content (rd/read-until reader (fn [x] (or (nil? x) (#{\newline \return} x))))]
                           content)])
       (:deref
-        :quote
-        :syntax-quote) [tag (parse-printables reader tag 1 true)]
+       :quote
+       :syntax-quote) [tag (parse-printables reader tag 1 true)]
 
       :unquote (parse-unquote reader)
 
@@ -225,8 +225,8 @@
       :comma [tag (rd/read-while reader #(identical? % c))]
       :space [tag (rd/read-while reader space?)]
       (:list
-        :vector
-        :map) [tag (parse-delim reader (get brackets c))]
+       :vector
+       :map) [tag (parse-delim reader (get brackets c))]
 
       :matched-delimiter (do (r/read-char reader) nil)
       (:eof :unmatched-delimiter) (let [the-error (error! [(keyword "error" (name tag)) (let [[line col] (rd/position reader)]
@@ -249,7 +249,7 @@
   "Create reader for strings."
   [s]
   (r/indexing-push-back-reader
-    (r/string-push-back-reader s )))
+   (r/string-push-back-reader s)))
 
 (defn comment-block-child? [{:keys [tag]}]
   (contains-identical-keyword? [:space :newline :comment] tag))
@@ -278,13 +278,21 @@
   "Parse ClojureScript source code to AST"
   ([source] (ast nil source))
   ([ns source]
-   (let [{out-str :source :as the-ast} (ast* source)
+   (let [{out-str :source
+          errors  :errors
+          :as     the-ast} (ast* source)
          modified-source? (not= source out-str)
-         result (assoc (if modified-source?
-                         (ast* out-str)
-                         the-ast) :string out-str
-                                  :modified-source? modified-source?)]
-     result)))
+         ;; TODO
+         ;; decide what to do about invalid parses.
+         #_result #_(assoc (if modified-source?
+                             (ast* out-str)
+                             the-ast) :string out-str
+                                      :modified-source? modified-source?)]
+     (assoc the-ast
+       :source source
+       :string out-str
+       :errors (when-not (empty? errors) errors)
+       :modified-source? modified-source?))))
 
 (defn normalize-comment-line [s]
   (string/replace s #"^;+\s?" ""))
@@ -293,29 +301,29 @@
 
 (comment
 
-  ;; IN PROGRESS
-  ;; thinking about a better way to group comment and code blocks
-  ;; ...contemplating a transducer, or similar thing?
+ ;; IN PROGRESS
+ ;; thinking about a better way to group comment and code blocks
+ ;; ...contemplating a transducer, or similar thing?
 
-  (defn conj-while [[out in] xform]
-    (loop [out out
-           in in]
-      (if-let [form (xform (peek in))]
-        (recur (update-in out [(dec (count out)) :value] conj form)
-               (subvec in 1))
-        [out in])))
+ (defn conj-while [[out in] xform]
+   (loop [out out
+          in in]
+     (if-let [form (xform (peek in))]
+       (recur (update-in out [(dec (count out)) :value] conj form)
+              (subvec in 1))
+       [out in])))
 
-  (groups {:comment-block {:init {:tag   :comment-block
-                                  :value ""}
-                           :pred comment-block-child?
-                           :conj (fn [oldval node]
-                                   (str oldval (-> (emit/string node)
-                                                   (normalize-comment-line))))}
-           :code-block    {:init {:tag   :base
-                                  :value []}
-                           :pred (complement comment-block-child?)
-                           :conj (fn [oldval node]
-                                   (conj oldval node))}} nodes))
+ (groups {:comment-block {:init {:tag   :comment-block
+                                 :value ""}
+                          :pred comment-block-child?
+                          :conj (fn [oldval node]
+                                  (str oldval (-> (emit/string node)
+                                                  (normalize-comment-line))))}
+          :code-block    {:init {:tag   :base
+                                 :value []}
+                          :pred (complement comment-block-child?)
+                          :conj (fn [oldval node]
+                                  (conj oldval node))}} nodes))
 
 (defn group-comment-blocks
   "Put consecutive top-level whitespace and comment nodes into :comment-blocks"
@@ -339,7 +347,7 @@
       tag)))
 
 (comment
-  (let [s "\n;a\n;b\n\n;c\nd\ne\n;e\n"]
-    (prn s)
-    (prn (emit/string (ast s)))
-    (= s (emit/string (ast s)))))
+ (let [s "\n;a\n;b\n\n;c\nd\ne\n;e\n"]
+   (prn s)
+   (prn (emit/string (ast s)))
+   (= s (emit/string (ast s)))))
