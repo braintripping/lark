@@ -21,7 +21,7 @@
   cell/status!)
 
 (def status
-  "Returns the cell's status (a keyword)"
+  "Returns the cell's status"
   cell/status)
 
 (def message
@@ -120,8 +120,7 @@
      (xhr/send url (cell-fn [event]
                             (let [xhrio (.-target event)]
                               (if-not (.isSuccess xhrio)
-                                (status! self :error {:message         (-> xhrio .getLastErrorCode (errors/getDebugMessage))
-                                                                :xhrio xhrio})
+                                (status! self :error (-> xhrio .getLastErrorCode (errors/getDebugMessage)))
                                 (let [formatted-value (-> xhrio (.getResponseText) (parse))]
                                   (status! self nil)
                                   (reset! self formatted-value))))))
@@ -132,10 +131,10 @@
   (let [self (first *cell-stack*)]
     (cell/status! self :loading)
     (js/navigator.geolocation.getCurrentPosition
-      (cell-fn [location]
-               (cell/status! self nil)
-               (->> {:latitude  (.. location -coords -latitude)
-                     :longitude (.. location -coords -longitude)}
-                    (reset! self)))
-      (cell-fn [error]
-               (cell/status! self :error (str error))))))
+     (cell-fn [location]
+              (cell/status! self nil)
+              (->> {:latitude  (.. location -coords -latitude)
+                    :longitude (.. location -coords -longitude)}
+                   (reset! self)))
+     (cell-fn [error]
+              (cell/status! self :error (str error))))))

@@ -113,10 +113,14 @@
 (defn status-view
   "Experimental: cells that implement IStatus can 'show' themselves differently depending on status."
   [this]
-  (render-hiccup [:.cell-status
-                  [(case (status this) :loading :.circle-loading :error :.circle-error)
-                   [:div]
-                   [:div]]]))
+  (render-hiccup (case (status this)
+                   :loading [:.cell-status
+                             [:.circle-loading
+                              [:div]
+                              [:div]]]
+                   :error [:div.pa3.bg-darken-red.br2
+                           (message this)]
+                   nil)))
 
 (defn default-view [self]
   (if (status self)
