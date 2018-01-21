@@ -13,8 +13,8 @@
        [
             [clojure.tools.reader.reader-types :as r]
             [clojure.tools.reader.edn :as edn]
-            [lark.tree.util :refer [contains-identical-keyword?]]]))
-  #?(:cljs (:require-macros [lark.tree.util :refer [contains-identical-keyword? contains-identical?]])))
+            [lark.tree.util :as util :refer [contains-identical-keyword?]]]))
+  #?(:cljs (:require-macros [lark.tree.util :as util :refer [contains-identical-keyword? contains-identical?]])))
 
 #?(:cljs (enable-console-print!))
 
@@ -142,8 +142,8 @@
         ;; determine if string is a symbol, inferring 'yes' on a
         ;; symbol-related read error:
         sexp (try (edn/read-string s)
-                  (catch #?(:cljs js/Error
-                            :clj  Exception) e
+                  (catch #?(:clj  'Exception
+                            :cljs 'js/Error) e
                     (let [message #?(:cljs (ex-message e)
                                      :clj  (.getMessage e))]
                       ;; TODO
@@ -202,6 +202,14 @@
       [:unquote-splicing (parse-printables reader :unquote 1 true)]
       [:unquote (parse-printables reader :unquote 1)])))
 
+(defn delimeter-error [reader]
+  (let [[line col] (rd/position reader)]
+    {:position  {:line       line
+                 :column     col
+                 :end-line   line
+                 :end-column (inc col)}
+     :delimiter *delimiter*}))
+
 (defn parse-next*
   [reader]
   (let [c (r/peek-char reader)
@@ -229,17 +237,15 @@
        :map) [tag (parse-delim reader (get brackets c))]
 
       :matched-delimiter (do (r/read-char reader) nil)
-      (:eof :unmatched-delimiter) (let [the-error (error! [(keyword "error" (name tag)) (let [[line col] (rd/position reader)]
-                                                                                          {:position  {:line       line
-                                                                                                       :column     col
-                                                                                                       :end-line   line
-                                                                                                       :end-column (inc col)}
-                                                                                           :delimiter *delimiter*})])]
+      (:eof :unmatched-delimiter) (let [the-error (error! [(keyword "error" (name tag)) (delimeter-error reader)])]
                                     (r/read-char reader)
                                     the-error)
       :meta (do (r/read-char reader)
                 [tag (parse-printables reader :meta 2)])
-      :string [tag (rd/read-string-data reader)])))
+      :string (try [tag (rd/read-string-data reader)]
+                   (catch #?(:clj  Exception
+                             :cljs js/Error) e
+                     (error! [:error/eof (delimeter-error reader)]))))))
 
 (defn parse-next
   [reader]
@@ -284,10 +290,12 @@
          modified-source? (not= source out-str)
          ;; TODO
          ;; decide what to do about invalid parses.
-         #_result #_(assoc (if modified-source?
-                             (ast* out-str)
-                             the-ast) :string out-str
-                                      :modified-source? modified-source?)]
+         #_result #_(-> (if modified-source?
+                          (ast* out-str)
+                          the-ast)
+                        (assoc :string out-str
+                               :errors (when-not (empty? errors) errors)
+                               :modified-source? modified-source?))]
      (assoc the-ast
        :source source
        :string out-str

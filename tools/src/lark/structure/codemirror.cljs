@@ -1,6 +1,7 @@
 (ns lark.structure.codemirror
   (:require
    ["codemirror" :as CM]
+   ["parinfer-codemirror" :as parinfer-codemirror]
    [fast-zip.core :as z]
    [goog.events :as events]
    [lark.tree.core :as tree]
@@ -226,11 +227,12 @@
 
 (defn update-ast!
   [{:keys [ast] :as cm}]
-  (when-let [{:keys [errors modified-source?] :as next-ast} (try (tree/ast (when *get-ns*
-                                                                             (*get-ns*)) (.getValue cm))
-                                                                 (catch js/Error e
-                                                                   (prn "error in update-ast!" e)))]
-
+  (let [{:keys [errors modified-source?] :as next-ast} (try (tree/ast (when *get-ns*
+                                                                           (*get-ns*)) (.getValue cm))
+                                                               (catch js/Error e
+                                                                 (prn "error in update-ast!" e)
+                                                                 (js/console.log (.-stack e))
+                                                                 {:errors []}))]
     (when (not= next-ast ast)
       (when-let [on-ast (-> cm :view :on-ast)]
         (on-ast next-ast))
@@ -238,13 +240,13 @@
         (clear-parse-errors! cm)
         (when-let [error (first errors)]
           (highlight-parse-errors! cm [error]))
-        (if (seq errors)
-          (swap! cm merge {:ast    nil
+        (swap! cm merge (if (empty? errors)
+                          {:ast    next-ast
+                           :zipper next-zip
+                           :errors nil}
+                          {:ast    nil
                            :zipper nil
-                           :errors errors})
-          (swap! cm assoc
-                 :ast next-ast
-                 :zipper next-zip))))))
+                           :errors errors}))))))
 
 (defn update-cursor!
   [{:keys                                    [zipper magic/brackets?]
@@ -383,3 +385,8 @@
 
 (.defineOption CM "cljsState" false
                (fn [cm] (aset cm "cljs$state" (or (aget cm "cljs$state") {::watches {}}))))
+
+(.defineOption CM "parinfer" false
+               (fn [cm mode]
+                 (when mode
+                   (parinfer-codemirror/init cm mode))))

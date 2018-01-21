@@ -11,7 +11,7 @@
   [coll x]
   `(or ~@(for [option coll]
            `((macros/case :clj ~'identical? :cljs ~'keyword-identical?)
-              ~option ~x))))
+             ~option ~x))))
 
 (defmacro contains-identical?
   "Returns true if `x` is identical to any item in `coll` (expands to sequential `identical?` comparisons)."
