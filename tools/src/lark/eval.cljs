@@ -183,7 +183,7 @@
          result (atom nil)]
      (binding [*cljs-warning-handlers* [(partial warning-handler form source)]
                r/*data-readers* (conj r/*data-readers* {'js identity})]
-       (swap! cljs-cache assoc name source)
+       (swap! cljs-cache assoc file-name source)
        (cljs/compile-str c-state source file-name opts
                          (fn [{error                       :error
                                compiled-js-with-source-map :value}]
