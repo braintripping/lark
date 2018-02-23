@@ -1,4 +1,4 @@
-(defproject lark/tools "0.1.27"
+(defproject lark/tools "0.1.28-SNAPSHOT"
 
   :description "Open-source components of the Lark editor"
 
