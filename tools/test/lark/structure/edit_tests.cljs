@@ -1,5 +1,5 @@
 (ns lark.structure.edit-tests
-  (:require [lark.structure.codemirror]
+  (:require [lark.editors.codemirror]
             [lark.structure.edit :as edit]
             [lark.structure.test-utils :as utils :refer [test-exec]]
             [cljs.test :refer-macros [deftest is are testing]]))

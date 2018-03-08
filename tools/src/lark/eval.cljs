@@ -153,8 +153,6 @@
     {:line   line
      :column col}))
 
-
-
 (defn add-error-position [{:keys [error error/position error/kind start-position source-map] :as result}]
   (cond-> result
           (and error (nil? position)) (assoc :error/position

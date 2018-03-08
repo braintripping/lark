@@ -12,3 +12,6 @@ test/target
 cljs-runtime
 out
 node_modules
+.cpcache
+.shadow-cljs
+tools/public/js

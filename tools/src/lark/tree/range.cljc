@@ -1,6 +1,6 @@
 (ns lark.tree.range
-  (:require [lark.tree.emit :as unwrap]
-            [lark.tree.node :as n]
+  (:require [lark.tree.node :as n]
+            [lark.tree.reader :as rd]
             [fast-zip.core :as z]))
 
 (defn lt [pos1 pos2]
@@ -21,7 +21,8 @@
                                    false [> <])]
     (fn within? [container pos]
       (and container
-           (if (map? container)
+           (if (= (type container) z/ZipperLocation)
+             (within? (z/node container) pos)
              (let [{pos-line :line pos-column :column} pos
                    {end-pos-line :end-line end-pos-column :end-column
                     :or          {end-pos-line   pos-line
@@ -30,15 +31,14 @@
                (and (>= pos-line line)
                     (<= end-pos-line end-line)
                     (if (= pos-line line) (greater-than pos-column column) true)
-                    (if (= end-pos-line end-line) (less-than end-pos-column end-column) true)))
-             (within? (z/node container) pos))))))
+                    (if (= end-pos-line end-line) (less-than end-pos-column end-column) true))))))))
 
 (def within? (contains-fn true))
 (def inside? (contains-fn false))
 
 (defn edge-ranges [node]
   (when (n/has-edges? node)
-    (let [[left right] (get unwrap/edges (get node :tag))]
+    (let [[left right] (get rd/edges (get node :tag))]
       (cond-> []
               left (conj {:line       (:line node) :end-line (:line node)
                           :column     (:column node)
@@ -48,32 +48,36 @@
                            :end-column (:end-column node)})))))
 
 (defn inner-range [{:keys [line column end-line end-column tag] :as node}]
-  (if-let [[left right] (get unwrap/edges tag)]
+  (if-let [[left right] (get rd/edges tag)]
     {:line       line
      :column     (+ column (count left))
      :end-line   end-line
      :end-column (- end-column (count right))}
     node))
 
-(defn shift-end [{:keys [line column]}]
+(defn start->end [{:keys [line column]}]
   {:end-line line :end-column column})
-(defn shift-start [{:keys [end-line end-column]}]
+(defn end->start [{:keys [end-line end-column]}]
   {:line end-line :column end-column})
 
 (defn bounds
   "Returns position map for left or right boundary of the node."
   ([node] (select-keys node [:line :column :end-line :end-column]))
   ([node side]
-   (case side :left (select-keys node [:line :column])
+   (case side :left {:line (get node :line)
+                     :column (get node :column)}
               :right (if-let [end-line (:end-line node)]
                        {:line   end-line
                         :column (:end-column node)}
                        (bounds node :left)))))
 
-(defn pos= [p1 p2]
+(defn range= [p1 p2]
   (= (bounds p1)
      (bounds p2)))
 
+(defn pos= [p1 p2]
+  (= (bounds p1 :left)
+     (bounds p2 :left)))
 
 (defn empty-range? [node]
   (and (or (= (:line node) (:end-line node)) (nil? (:end-line node)))
@@ -83,7 +87,7 @@
   "Get range(s) to highlight for a node. For a collection, only highlight brackets."
   [node]
   (if (n/may-contain-children? node)
-    (if (second (get unwrap/edges (get node :tag)))
+    (if (second (get rd/edges (get node :tag)))
       (edge-ranges node)
-      (update (edge-ranges (first (:value node))) 0 merge (bounds node :left)))
+      (update (edge-ranges (first (:children node))) 0 merge (bounds node :left)))
     [node]))

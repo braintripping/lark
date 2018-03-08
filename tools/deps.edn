@@ -1,0 +1,6 @@
+{:paths ["src"
+         "test"]
+ :deps {fast-zip {:mvn/version "0.7.0"}
+        net.cgrand/macrovich {:mvn/version "0.2.0"}
+        lark/backtick {:mvn/version "0.1.0"}
+        re-view {:mvn/version "0.4.8"}}}

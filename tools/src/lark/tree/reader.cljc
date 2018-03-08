@@ -1,10 +1,46 @@
 (ns lark.tree.reader
   (:refer-clojure :exclude [peek next])
-  (:require #?(:cljs [cljs.tools.reader.reader-types :as r]
-               :clj [clojure.tools.reader.reader-types :as r]))
+  (:require
+   [lark.tree.util :as util]
+   #?(:cljs [cljs.tools.reader.reader-types :as r]
+      :clj
+   [clojure.tools.reader.reader-types :as r]))
   #?(:cljs (:import [goog.string StringBuffer])))
 
+(def ^:dynamic *invalid-nodes* nil)
+(def ^:dynamic *cursor* nil)
+
+(def ^:dynamic *delimiter* (list))
+
 (def peek r/peek-char)
+
+(def edges
+  {:deref ["@"]
+   :list [\( \)]
+   :fn ["#"]
+   :map [\{ \}]
+   :meta ["^"]
+   :quote ["'"]
+   :reader-meta ["#^"]
+   :raw-meta ["^"]
+   :reader-macro ["#"]
+   :regex ["#"]
+   :set ["#"]
+   :string [\" \"]
+   :syntax-quote ["`"]
+   :unquote ["~"]
+   :unquote-splicing ["~@"]
+   :uneval ["#_"]
+   :var ["#'"]
+   :vector [\[ \]]
+   :reader-conditional ["#?"]
+   :reader-conditional-splice ["#?@"]})
+
+(defn close-bracket? [ch]
+  (util/contains-identical? [\) \] \}] ch))
+
+(defn open-bracket? [ch]
+  (util/contains-identical? [\( \[ \{] ch))
 
 (defn throw-reader
   "Throw reader exception, including line/column."
@@ -12,10 +48,10 @@
   (let [c (r/get-column-number reader)
         l (r/get-line-number reader)]
     (throw
-      (#?(:cljs js/Error.
-          :clj  Exception.)
-        (str fmt data
-             " [at line " l ", column " c "]")))))
+     (#?(:cljs js/Error.
+         :clj  Exception.)
+      (str fmt data
+           " [at line " l ", column " c "]")))))
 
 (def buf #?(:cljs (StringBuffer.)
             :clj  (StringBuilder.)))
@@ -63,75 +99,339 @@
   [reader ch]
   (r/unread reader ch))
 
-(defn read-repeatedly
-  "Call the given function on the given reader until it returns
-   a non-truthy value."
-  [reader read-fn]
-  (loop [reader reader
-         out []]
-    (let [next-node (read-fn reader)]
-      (cond (nil? next-node)
-            out
-            (= "error" (namespace (get next-node :tag)))
-            (conj out next-node)
-            :else
-            (recur reader (conj out next-node))))))
-
 (defn position
   "Returns 0-indexed vector of [line, column] for current reader position."
   [reader]
   [(dec (r/get-line-number reader))
    (dec (r/get-column-number reader))])
 
+;; TODO
+;; :value => (first children)
+;; first, last, rest, etc. -- operate on children
+;; seq -- returns children
+
+(defprotocol IRange
+  ;; mutates range of node -- for internal parser use
+  (assoc-range! [this position]))
+
+(defprotocol IAppend
+  (append [this x]))
+
+(deftype Node [tag
+               options
+               ^:mutable range
+               value
+               children]
+
+  ;; ------------- Add child nodes via `append` --------------
+
+  IAppend
+  (append [coll o]
+    (Node. tag options range value (conj children o)))
+
+  ;; ------------- Position information stored via `meta` --------------
+
+  IRange
+  (assoc-range! [this position]
+    (set! range position)
+    this)
+
+  ;; ------------- Equality --------------
+
+  IEquiv
+  (-equiv [o other]
+   ;; position not taken into account
+    (and (= tag (get other :tag))
+         (= children (get other :children))
+         (= value (get other :value))
+         (= range (get other :range))
+         (= options (get other :options))))
+
+  ;; ------------- Comparison by range --------------
+
+  IComparable
+  (-compare [x y]
+    (let [l (- (get x :line) (get y :line))]
+      (if (not= l 0)
+        l
+        (- (get x :column) (get y :column)))))
+
+  ;; ------------- Associative operations on `options` --------------
+
+  IAssociative
+  (-contains-key? [this key]
+    (case key :tag true
+              (:line
+               :column
+               :end-line
+               :end-column) (some? meta)
+              :value (some? value)
+              :children (some? children)
+              :range (some? range)
+              (contains? options key)))
+  (-assoc [this k VAL]
+    (case k
+      :tag (Node. VAL options range value children)
+      :value (Node. tag options range VAL children)
+      :children (Node. tag options range value VAL)
+      :range (Node. tag options VAL value children)
+      (Node. tag (assoc options k VAL) range value children)))
+
+  ICollection
+  (-conj [coll entry]
+    (if (vector? entry)
+      (-assoc coll (-nth entry 0) (-nth entry 1))
+      (reduce -conj
+              coll
+              entry)))
+
+  ;; `get` supports direct access to tag, value, and positional elements
+
+  ILookup
+  (-lookup [this key]
+    (case key :tag tag
+              :value value
+              :children children
+              :range range
+              :line (nth range 0)
+              :column (nth range 1)
+              :end-line (nth range 2)
+              :end-column (nth range 3)
+              :options options
+              (get options key)))
+  (-lookup [this key not-found]
+    (or (case key :tag tag
+                  :value value
+                  :children children
+                  :range range
+                  :line (nth range 0)
+                  :column (nth range 1)
+                  :end-line (nth range 2)
+                  :end-column (nth range 3)
+                  :options options
+                  nil)
+        (get options key not-found)))
+
+  ;; for debugging
+  IPrintWithWriter
+  (-pr-writer [o writer _]
+    (let [options (cond-> (dissoc options :source :invalid-nodes)
+                          range (assoc :range range))]
+      (-write writer (str (if (or children (seq options))
+                            (cond-> [tag]
+                                    options (conj options)
+                                    value (conj value)
+                                    children (into children))
+                            tag))))))
+
+(defn delimiter-error [tag reader]
+  (let [[line col] (position reader)]
+    (Node. :error {:tag tag
+                   :expected (first *delimiter*)} [line
+                                                   col
+                                                   line
+                                                   (inc col)] nil nil)))
+
+(defn current-pos [reader]
+  [(dec (r/get-line-number reader))
+   (dec (r/get-column-number reader))])
+
 (defn read-with-position
   "Use the given function to read value, then attach row/col metadata."
   [reader read-fn]
-  ;; X dec row, because we wrap forms with [\n ...]
-  ;; X dec end-col, because that char belongs to the next form
   (let [start-line (dec (r/get-line-number reader))
-        start-column (dec (r/get-column-number reader))
-        [tag value opts :as form] (read-fn reader)]
-    (when-not (nil? form)
-      (merge {:tag        tag
-              :value      value
-              :line       start-line
-              :column     start-column
-              :end-line   (dec (r/get-line-number reader))
-              :end-column (dec (r/get-column-number reader))}
-             opts))))
+        start-column (dec (r/get-column-number reader))]
+    (when-let [node (read-fn reader)]
+      (assoc-range!
+       node
+       [start-line start-column
+        (dec (r/get-line-number reader))
+        (dec (r/get-column-number reader))]))))
 
-(defn read-n
-  "Call the given function on the given reader until `n` values matching `p?` have been
-   collected."
-  [reader node-tag read-fn p? n]
-  {:pre [(pos? n)]}
-  (loop [c 0
-         vs []]
-    (if ^boolean (< c n)
-      (if-let [v (read-fn reader)]
-        (recur
-          (if ^boolean (p? v) (inc c) c)
-          (conj vs v))
-        (throw-reader
-          reader
-          "%s node expects %d value%s."
-          node-tag
-          n
-          (if ^boolean (= n 1) "" "s")))
-      vs)))
+(defn report-invalid! [node]
+  (let [node (assoc node :invalid? true)]
+    (some-> *invalid-nodes*
+            (vswap! conj node))
+    node))
+
+(defn InvalidToken!
+  ([tag value] (InvalidToken! tag value nil))
+  ([tag value position]
+   (report-invalid!
+    (->Node :token {:invalid? true
+                    :info {:tag tag}} position value nil))))
+
+(defn Splice
+  ([children]
+   (->Node :splice nil nil nil children))
+  ([node children]
+   (Splice (into [node] children))))
+
+(defn CollectionNode [tag nodes]
+  (->Node tag nil nil nil nodes))
+
+(defn ValueNode [tag value]
+  (->Node tag nil nil value nil))
+
+(defn EmptyNode [tag]
+  (->Node tag nil nil nil nil))
+
+(defn CursorNode! [position]
+  (let [cur (assoc (EmptyNode :cursor) :range position)]
+    (some-> *cursor*
+            (vreset! cur))))
+
+(defn split-after-n
+  "Splits after `n` values which pass `pred`.
+
+  Returns vector of the form
+  [<taken-values> <remaining-values> <took-n-values?>]"
+  [n pred coll]
+  (loop [remaining coll
+         remaining-n n
+         taken []]
+    (cond (= remaining-n 0)
+          [true taken remaining]
+          (empty? remaining)
+          [false taken remaining]
+          :else
+          (let [next-item (nth remaining 0)
+                count-it? (pred next-item)]
+            (recur (subvec remaining 1)
+                   (cond-> remaining-n
+                           count-it? (dec))
+                   (conj taken next-item))))))
+
+(defn take-children
+  [reader {:keys [:read-fn
+                  :count-pred]
+           take-n :take-n}]
+  ;; returns `child-values, remaining-values, valid?`
+  (loop [reader reader
+         i 0
+         out []]
+    (if (> i 10000)
+      (do
+        (js/console.error (js/Error. "Infinite loop?"))
+        [false out nil])
+      (if (and (some? take-n) (= i take-n))
+        [true out nil]
+        (let [{:keys [tag value children] :as next-node} (read-fn reader)
+              next-i (if (and (some? take-n) (some? count-pred))
+                       (cond-> i
+                               (count-pred next-node) (inc))
+                       (inc i))]
+          (case tag
+            :unmatched-delimiter
+            (if
+             (contains? (set *delimiter*) value)            ;; can match prev
+              (do
+                (unread reader value)
+                [false out nil])
+              (recur reader next-i (conj out (report-invalid! next-node))))
+
+            :splice
+            (if take-n
+              (split-after-n take-n count-pred children)
+              (recur reader next-i (into out children)))
+
+            (:eof nil)
+            [false out nil]
+
+            :matched-delimiter
+            (if (and take-n (not= take-n i))
+              (do (unread reader value)
+                  [false out nil])
+              [true out nil])
+
+            (recur reader next-i (conj out next-node))))))))
+
+(defn conj-children
+  [coll-node reader {:keys [:read-fn
+                            :count-pred]
+                     take-n :take-n}]
+  (let [start-pos (current-pos reader)
+        coll-tag (get coll-node :tag)
+        invalid-exit (fn [out]
+                       (case coll-tag
+                         :base (assoc coll-node :children out)
+                         (Splice (let [[line col] start-pos
+                                       [left right] (get edges coll-tag)]
+                                   (report-invalid!
+                                    (->Node :unmatched-delimiter
+                                            {:info {:tag coll-tag
+                                                    :direction :forward
+                                                    :expects right}}
+                                            [line (- col (count left)) line col]
+                                            left
+                                            nil))) out)))]
+    (loop [reader reader
+           i 0
+           out []]
+      (if (> i 10000)
+        (do
+          (prn coll-node out)
+          (js/console.error (js/Error. "Infinite loop?"))
+          (assoc coll-node :children out))
+        (if (and (some? take-n) (= i take-n))
+          (assoc coll-node :children out)
+
+          (let [{:keys [tag value children] :as next-node} (read-fn reader)
+                next-i (if (and (some? take-n) (some? count-pred))
+                         (cond-> i
+                                 (count-pred next-node) (inc))
+                         (inc i))]
+            (case tag
+              :unmatched-delimiter
+              (if
+               (contains? (set *delimiter*) value)          ;; can match prev
+                (do
+                  (unread reader value)
+                  (invalid-exit out))
+                (recur reader next-i (conj out (report-invalid! next-node))))
+
+              :splice
+              (if take-n
+                (let [[valid? taken-values remaining-values] (split-after-n take-n count-pred children)]
+                  (if valid?
+                    (Splice (assoc coll-node :children taken-values)
+                            remaining-values)
+                    (invalid-exit (into out children))))
+                (recur reader next-i (into out children)))
+
+              (:eof nil)
+              (invalid-exit out)
+
+              :matched-delimiter
+              (if (and take-n (not= take-n i))
+                (do (unread reader value)
+                    (invalid-exit out))
+                (assoc coll-node :children out))
+
+              (recur reader next-i (conj out next-node)))))))))
+
+(defn NodeWithChildren
+  [reader read-fn tag delimiter]
+  (r/read-char reader)
+  (binding [*delimiter* (cons delimiter *delimiter*)]
+    (conj-children (EmptyNode tag) reader {:read-fn read-fn})))
 
 (defn read-string-data
-  [reader]
+  [node reader]
   (ignore reader)
   #?(:cljs (.clear buf)
      :clj  (.setLength buf 0))
   (loop [escape? false]
     (if-let [c (r/read-char reader)]
       (cond (and (not escape?) (identical? c \"))
-            #?(:cljs (.toString buf)
-               :clj  (str buf))
+            (assoc node :value #?(:cljs (.toString buf)
+                                  :clj  (str buf)))
             :else
             (do
               (.append buf c)
               (recur (and (not escape?) (identical? c \\)))))
-      (throw-reader reader "Unexpected EOF while reading string."))))
+      (report-invalid!
+       (assoc node :tag :token
+                   :options {:tag (:tag node)}
+                   :value (str \" #?(:cljs (.toString buf)
+                                     :clj  (str buf))))))))

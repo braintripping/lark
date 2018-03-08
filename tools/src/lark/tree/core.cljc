@@ -13,14 +13,7 @@
   "Given ClojureScript source, returns AST"
   parse/ast)
 
-(defn ast-zip
-  "Given AST, returns zipper"
-  [ast]
-  (z/zipper
-    n/may-contain-children?
-    :value
-    (fn [node children] (assoc node :value children))
-    ast))
+(def ast-zip n/ast-zip)
 
 (def string-zip
   "Given ClojureScript source, returns zipper"
@@ -52,7 +45,7 @@
 (def closest nav/closest)
 (def include-prefix-parents nav/include-prefix-parents)
 
-(def node-at nav/navigate)
+(def navigate nav/navigate)
 (def mouse-eval-region nav/mouse-eval-region)
 
 ;; Ranges
@@ -62,38 +55,47 @@
 (def edge-ranges range/edge-ranges)
 (def inner-range range/inner-range)
 (def bounds range/bounds)
-(def shift-end range/shift-end)
-(def shift-start range/shift-start)
+(def start->end range/start->end)
+(def end->start range/end->start)
 
 (def empty-range? range/empty-range?)
 (def node-highlights range/node-highlights)
 
-
 (comment
 
-  (def log (atom []))
+ (def log (atom []))
 
-  (assert (n/within? {:line           1 :column 1
-                            :end-line 1 :end-column 2}
-                     {:line 1 :column 1}))
+ (assert (range/within? {:line 1 :column 1
+                         :end-line 1 :end-column 2}
+                        {:line 1 :column 1}))
 
-  (doseq [[sample-str [line column] result-sexp result-string] [["1" [1 1] 1 "1"]
-                                                                ["[1]" [1 1] [1] "[1]"]
-                                                                ["#{}" [1 1] #{} "#{}"]
-                                                                ["\"\"" [1 1] "" "\"\""]
-                                                                ["(+ 1)" [1 0] nil nil]
-                                                                ["(+ 1)" [1 1] '(+ 1) "(+ 1)"]
-                                                                ["(+ 1)" [1 2] '+ "+"]
-                                                                ["(+ 1)" [1 3] nil " "]
-                                                                ["(+ 1)" [1 4] 1 "1"]
-                                                                ["(+ 1)" [1 5] '(+ 1) "(+ 1)"]
-                                                                ["(+ 1)" [1 6] nil nil]
-                                                                ["\n1" [2 1] 1 "1"]]]
-    (reset! log [])
-    (let [result-node (node-at (ast sample-str) {:line   line
-                                                 :column column})]
-      (assert (= (sexp result-node) result-sexp))
-      (assert (= (string result-node) result-string)))))
+ (doseq [[sample-str [line column] expected-sexp expected-string] [["1" [0 0] 1 "1"]
+                                                                   ["[1]" [0 0] [1] "[1]"]
+                                                                   #_["#{}" [0 1] #{} "#{}"]
+                                                                   #_["\"\"" [0 1] "" "\"\""]
+                                                                   #_["(+ 1)" [0 0] nil nil]
+                                                                   #_["(+ 1)" [0 1] '(+ 1) "(+ 1)"]
+                                                                   #_["(+ 1)" [0 2] '+ "+"]
+                                                                   #_["(+ 1)" [0 3] nil " "]
+                                                                   #_["(+ 1)" [0 4] 1 "1"]
+                                                                   #_["(+ 1)" [0 5] '(+ 1) "(+ 1)"]
+                                                                   #_["(+ 1)" [0 6] nil nil]
+                                                                   #_["\n1" [1 1] 1 "1"]]]
+   ;(reset! log [])
+   (let [result-node (-> (ast sample-str)
+                         (navigate {:line line
+                                    :column column}))]
+     (prn :res result-node)
+     (when-not (= (sexp result-node) expected-sexp)
+       (prn :SEXP_DIFF {:str sample-str
+                        :pos [line column]
+                        :expected-sexp expected-sexp
+                        :actual-sexp (sexp result-node)}))
+     (when-not (= (string result-node) expected-string)
+       (prn :STR_DIFF {:str sample-str
+                       :pos [line column]
+                       :expected-string expected-string
+                       :actual-string (string result-node)})))))
 
 #_(let [sample-code-string ""]
     (let [_ (.profile js/console "parse-ast")
@@ -103,3 +105,98 @@
 
 (def shape parse/shape)
 (def group-comment-blocks parse/group-comment-blocks)
+
+(ast "#{")
+
+(binding [emit/*features* #{:cljs}]
+  (for [[in-string out] (->> '[[" "
+                                "\n"
+                                \tab
+                                ",,\t\n"
+                                "#_{}"
+                                "; this is a comment\n"
+                                ";; this is a comment\n"
+                                "; this is a comment"
+                                ";; this is a comment"
+                                ";"
+                                ";;"
+                                ";\n"
+                                ";;\n"] _
+                               "4" 4
+                               "sym" sym
+                               "\"a\"" "a"
+                               "'[" ::emit/INVALID_TOKEN
+                               ["]"
+                                "["
+                                "^"
+                                "#"
+                                "#("
+                                "#{"
+                                "'"
+                                "#{[]"] ::emit/INVALID_TOKEN
+                               "3" 3
+                               "\n" _
+                               "[]" []
+                               "()" ()
+                               "@1" (deref 1)
+                               "#(+)" (fn* [] (+))
+                               "@()" (deref ())
+                               "#{1}" #{1}
+                               "#'wha" (var wha)
+                               "~1" (clojure.core/unquote 1)
+                               ["'1"
+                                "`1"] (quote 1)
+                               "#?(:clj 1 :cljs (+ 2))" [(+ 2)]
+                               "^:yes {}" {}
+                               "^{:no false} {}" {}
+                               "::a/b" :a/b
+                               ";a" _
+                               "#_()" _
+                               "(1)" (1)
+                               "[1]" [1]
+                               ["{1 2}"
+                                "{1    2}"] {1 2}
+
+                               ["@sym"
+                                "@  sym"] (deref sym)
+                               ["'sym"
+                                "' sym"
+                                "`sym"
+                                "`  sym"] (quote sym)
+                               ["~sym"
+                                "~  sym"] (clojure.core/unquote sym)
+                               "~@sym" (clojure.core/unquote-splicing sym)
+
+                               "#'sym" (var sym)
+                               "#'\nsym" (var sym)
+
+                               "^:wha" ::emit/INVALID_TOKEN
+
+                               "#(+ 1 1)" #(+ 1 1)
+
+                               ["#^:wha {}"
+                                "#^{:wha true} {}"] {}
+
+                               ;; regexp's are never equal
+                               #_["#\"[A-B]\"" [#"[A-B]"]]]
+                             (apply hash-map)
+                             (reduce-kv (fn [m s v]
+                                          (if (vector? s)
+                                            (reduce (fn [m s]
+                                                      (assoc m s v)) m s)
+                                            (assoc m s v))) {}))
+        :let [expected-sexp (if (= '_ out) nil out)]]
+    (let [the-ast (ast in-string)
+          the-sexp (-> the-ast
+                       (sexp)
+                       (first))
+          the-str (string the-ast)]
+      (cond (not= the-sexp expected-sexp)
+            [false :incorrect-sexp (sexp the-ast) the-ast :expected expected-sexp]
+            (not= the-str in-string)
+            [false the-str the-ast :expected in-string]
+            :else
+            true))))
+
+
+(ast "#{[]")

@@ -1,7 +1,6 @@
-(ns lark.structure.codemirror
+(ns lark.editors.codemirror
   (:require
    ["codemirror" :as CM]
-   ["parinfer-codemirror" :as parinfer-codemirror]
    [fast-zip.core :as z]
    [goog.events :as events]
    [lark.tree.core :as tree]
@@ -10,8 +9,7 @@
 
    ;; for protocols:
    [lark.editor :as Editor]
-   ;; for M1 modifier differentiation
-   [lark.commands.registry :as registry]))
+   [clojure.string :as string]))
 
 (def ^:dynamic *get-ns* (fn [] (symbol "cljs.user")))
 
@@ -25,15 +23,26 @@
   IEquiv
   (-equiv [x y]
     (and y
-         (= (.-line x) (.-line y))
-         (= (.-ch x) (.-ch y))))
+         (= (.-ch x) (get y :column))
+         (= (.-line x) (get y :line))))
   IPrintWithWriter
   (-pr-writer [pos writer _]
     (-write writer (str "#Pos[" (.-line pos) ", " (.-ch pos) "]")))
+  IAssociative
+  (-assoc [o k v]
+    (case k
+      :line (CM/Pos v (.-ch o))
+      :column (CM/Pos (.-line o) v)))
   ILookup
   (-lookup
-    ([o k] (gobj/get o k))
-    ([o k not-found] (gobj/get o k not-found))))
+    ([o k]
+     (case k :line (.-line o)
+             :column (.-ch o)
+             (gobj/get o k)))
+    ([o k not-found]
+     (case k :line (.-line o)
+             :column (.-column o)
+             (gobj/get o k not-found)))))
 
 (defn range->Pos
   "Coerces Clojure maps to CodeMirror positions."
@@ -41,25 +50,29 @@
   (CM/Pos line column))
 
 (defn Pos->range [cursor]
-  {:line       (.-line cursor)
-   :column     (.-ch cursor)
-   :end-line   (.-line cursor)
+  {:line (.-line cursor)
+   :column (.-ch cursor)
+   :end-line (.-line cursor)
    :end-column (.-ch cursor)})
 
 (defn- cursor-bookmark []
   (gdom/createDom "div" #js {"className" "cursor-marker"}))
 
-(defn cursor-loc
+(defn sexp-near
   "Current sexp, or nearest sexp to the left, or parent."
-  [pos loc]
-  (let [the-loc (if-not (tree/whitespace? (z/node loc))
-                  loc
-                  (if (and (= pos (select-keys (z/node loc) [:line :column]))
-                           (z/left loc)
-                           (not (tree/whitespace? (z/node (z/left loc)))))
-                    (z/left loc)
-                    loc))]
-    (tree/include-prefix-parents the-loc)))
+  ([pos loc] (sexp-near pos loc nil))
+  ([pos loc {:keys [direction ignore?]
+             :or {direction :left
+                  ignore? tree/whitespace?}}]
+   (let [nav (case direction :left z/left :right z/right)
+         the-loc (if-not (ignore? (z/node loc))
+                   loc
+                   (if (and (= pos (select-keys (z/node loc) [:line :column]))
+                            (nav loc)
+                            (not (ignore? (z/node (nav loc)))))
+                     (nav loc)
+                     loc))]
+     (tree/include-prefix-parents the-loc))))
 
 
 (defn set-temp-marker! [cm]
@@ -126,15 +139,22 @@
 
 (defn range->positions
   "Given a Clojure-style column and line range, return Codemirror-compatible `from` and `to` positions"
-  [{:keys [line column end-line end-column]}]
+  [{:keys [line column end-line end-column] :as node}]
   [(CM/Pos line column)
    (CM/Pos (or end-line line) (or end-column column))])
+
+(defn mark-range!
+  "Add marks to a collection of Clojure-style ranges"
+  [cm range payload]
+  (let [[from to] (range->positions range)]
+    (.markText cm from to payload)))
 
 (defn mark-ranges!
   "Add marks to a collection of Clojure-style ranges"
   [cm ranges payload]
-  (doall (for [[from to] (map range->positions ranges)]
-           (.markText cm from to payload))))
+  (->> (mapv range->positions ranges)
+       (reduce (fn [out [from to]]
+                 (conj out (.markText cm from to payload))) [])))
 
 (defn range-text [cm range]
   (let [[from to] (range->positions range)]
@@ -160,12 +180,12 @@
 
 (defn pos->boundary
   ([pos]
-   {:line   (or (.-line pos) 0)
+   {:line (or (.-line pos) 0)
     :column (.-ch pos)})
   ([pos side]
-   (case side :left {:line   (or (.-line pos) 0)
+   (case side :left {:line (or (.-line pos) 0)
                      :column (.-ch pos)}
-              :right {:end-line   (or (.-line pos) 0)
+              :right {:end-line (or (.-line pos) 0)
                       :end-column (.-ch pos)})))
 
 (defn selection-bounds [sel]
@@ -187,16 +207,21 @@
     (tree/inner-range node)
     node))
 
-(defn select-at-cursor [{{:keys [bracket-loc]} :magic/cursor :as cm} top-loc?]
-  (when bracket-loc
+(defn select-at-cursor [{{:keys [loc pos]} :magic/cursor :as cm} top-loc?]
+  (when-let [cursor-loc (sexp-near pos loc {:direction :left})]
     (let [pos (Pos->range (get-cursor cm))
-          node (if top-loc? (z/node (tree/top-loc bracket-loc))
-                            (highlight-range pos (z/node bracket-loc)))]
+          node (if top-loc? (z/node (tree/top-loc cursor-loc))
+                            (highlight-range pos (z/node cursor-loc)))]
       (when (and node (not (tree/whitespace? node)))
         (temp-select-node! cm node)))))
 
+(def mac? (let [platform (.. js/navigator -platform)]
+            (or (string/starts-with? platform "Mac")
+                (string/starts-with? platform "iP"))))
+
 (defn keyup-selection-update! [cm e]
-  (when-not (registry/M1-down? e)
+  (when-not (if mac? (.-metaKey e)
+                     (.-ctrlKey e))
     (return-to-temp-marker! cm)))
 
 (defn clear-brackets! [cm]
@@ -205,67 +230,69 @@
   (swap! cm update :magic/cursor dissoc :handles))
 
 (defn match-brackets! [cm node]
-  (let [prev-node (get-in cm [:magic/cursor :node])]
-    (when (not= prev-node node)
-      (clear-brackets! cm)
-      (when (some-> node (tree/may-contain-children?))
-        (swap! cm assoc-in [:magic/cursor :handles]
-               (mark-ranges! cm (tree/node-highlights node) #js {:className "CodeMirror-matchingbracket"}))))))
+  (clear-brackets! cm)
+  (when (some-> node (tree/may-contain-children?))
+    (swap! cm assoc-in [:magic/cursor :handles]
+           (mark-ranges! cm (tree/node-highlights node) #js {:className "CodeMirror-matchingbracket"}))))
 
 (defn clear-parse-errors! [cm]
   (doseq [handle (get-in cm [:magic/errors :handles])]
     (.clear handle))
   (swap! cm update :magic/errors dissoc :handles))
 
-(defn highlight-parse-errors! [cm errors]
-  (let [error-ranges (map (comp :position second) errors)
-        ;; TODO
-        ;; derive className from error name, not all errors are unmatched brackets.
-        ;; (somehow) add a tooltip or other attribute to the marker (for explanation).
-        handles (mark-ranges! cm error-ranges #js {:className "CodeMirror-unmatchedBracket"})]
+(defn highlight-parse-errors! [cm error-ranges]
+  (clear-parse-errors! cm)
+  (let [handles (into [] (for [node error-ranges]
+                           (mark-range! cm node #js {:className (str "error-text"
+                                                                     (when-let [tag (some-> (get-in node [:info :tag])
+                                                                                            (name))]
+                                                                       (str " cm-" tag)))})))]
     (swap! cm assoc-in [:magic/errors :handles] handles)))
+
+;; todo
+;; cursor tracking w/ AST
+#_(defn highlight-cursor! [cm cursor]
+  (some-> (get cm :cursor/handle)
+          (.clear))
+  (swap! cm assoc :cursor/handle
+         (.setBookmark cm (range->Pos cursor) #js {:widget (cursor-bookmark)})))
 
 (defn update-ast!
   [{:keys [ast] :as cm}]
-  (let [{:keys [errors modified-source?] :as next-ast} (try (tree/ast (when *get-ns*
-                                                                           (*get-ns*)) (.getValue cm))
-                                                               (catch js/Error e
-                                                                 (prn "error in update-ast!" e)
-                                                                 (js/console.log (.-stack e))
-                                                                 {:errors []}))]
+  (let [{:keys [invalid-nodes cursor] :as next-ast} (try (tree/ast (.getValue cm))
+                                                         (catch js/Error e
+                                                           (prn "error in update-ast!" e)
+                                                           (js/console.log (.-stack e))
+                                                           {:errors []}))]
+    (highlight-parse-errors! cm invalid-nodes)
     (when (not= next-ast ast)
       (when-let [on-ast (-> cm :view :on-ast)]
         (on-ast next-ast))
       (let [next-zip (tree/ast-zip next-ast)]
-        (clear-parse-errors! cm)
-        (when-let [error (first errors)]
-          (highlight-parse-errors! cm [error]))
-        (swap! cm merge (if (empty? errors)
-                          {:ast    next-ast
-                           :zipper next-zip
-                           :errors nil}
-                          {:ast    nil
-                           :zipper nil
-                           :errors errors}))))))
+        (swap! cm merge {:ast next-ast
+                         :zipper next-zip
+                         :ast/cursor cursor})))))
 
 (defn update-cursor!
-  [{:keys                                    [zipper magic/brackets?]
+  [{:keys [zipper magic/brackets?]
     {prev-pos :pos prev-zipper :prev-zipper} :magic/cursor
-    :as                                      cm}]
+    cursor :ast/cursor
+    :as cm}]
   (when (or (.hasFocus cm) (nil? prev-zipper))
     (when-let [pos (pos->boundary (get-cursor cm))]
       (when (or (not= pos prev-pos)
                 (not= prev-zipper zipper))
-        (when-let [loc (some-> zipper (tree/node-at pos))]
-          (let [bracket-loc (cursor-loc pos loc)
+        (when-let [loc (some-> zipper (tree/navigate pos))]
+          (let [bracket-loc (sexp-near pos loc {:ignore? #(or (tree/whitespace? %)
+                                                              (get % :invalid?))})
                 bracket-node (z/node bracket-loc)]
             (when brackets? (match-brackets! cm bracket-node))
-            (swap! cm update :magic/cursor merge {:loc          loc
-                                                  :node         (z/node loc)
-                                                  :bracket-loc  bracket-loc
+            (swap! cm update :magic/cursor merge {:loc loc
+                                                  :node (z/node loc)
+                                                  :bracket-loc bracket-loc
                                                   :bracket-node bracket-node
-                                                  :pos          pos
-                                                  :prev-zipper  zipper})))))))
+                                                  :pos pos
+                                                  :prev-zipper zipper})))))))
 
 (defn require-opts [cm opts]
   (doseq [opt opts] (.setOption cm opt true)))
@@ -303,6 +330,12 @@
     ([this f a b] (-reset! this (f @this a b)))
     ([this f a b xs] (-reset! this (apply f (concat (list @this a b) xs)))))
 
+  ITransientAssociative
+  (-assoc! [this key val]
+   (assert (= key :ast))
+   (swap! this assoc :ast val)
+   (update-ast! this))
+
   Editor/IKind
   (kind [this] :code)
 
@@ -311,7 +344,7 @@
   (get-selections [cm]
     (if-let [root-cursor (temp-marker-cursor-pos cm)]
       #js [#js {:anchor root-cursor
-                :head   root-cursor}]
+                :head root-cursor}]
       (.listSelections cm)))
 
   (put-selections! [cm selections]
@@ -336,19 +369,19 @@
     (.setCursor this position))
   (coords-cursor [this client-x client-y]
     (.coordsChar this #js {:left client-x
-                           :top  client-y} "window"))
+                           :top client-y} "window"))
   (cursor-coords [this]
     (let [coords (.cursorCoords this)]
       ;; TODO
       ;; these coords don't seem to be correct when using them
       ;; to scroll the cursor into view.
-      #_(.log js/console "cm" #js {:left   (- (.-left coords) (.-scrollX js/window))
-                                   :right  (- (.-right coords) (.-scrollX js/window))
-                                   :top    (- (.-top coords) (.-scrollY js/window))
+      #_(.log js/console "cm" #js {:left (- (.-left coords) (.-scrollX js/window))
+                                   :right (- (.-right coords) (.-scrollX js/window))
+                                   :top (- (.-top coords) (.-scrollY js/window))
                                    :bottom (- (.-bottom coords) (.-scrollY js/window))})
-      #js {:left   (- (.-left coords) (.-scrollX js/window))
-           :right  (- (.-right coords) (.-scrollX js/window))
-           :top    (- (.-top coords) (.-scrollY js/window))
+      #js {:left (- (.-left coords) (.-scrollX js/window))
+           :right (- (.-right coords) (.-scrollX js/window))
+           :top (- (.-top coords) (.-scrollY js/window))
            :bottom (- (.-bottom coords) (.-scrollY js/window))}))
 
   (start [this] (Pos 0 0))
@@ -385,8 +418,3 @@
 
 (.defineOption CM "cljsState" false
                (fn [cm] (aset cm "cljs$state" (or (aget cm "cljs$state") {::watches {}}))))
-
-(.defineOption CM "parinfer" false
-               (fn [cm mode]
-                 (when mode
-                   (parinfer-codemirror/init cm mode))))

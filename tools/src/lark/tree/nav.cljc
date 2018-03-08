@@ -2,52 +2,92 @@
   (:refer-clojure :exclude [range])
   (:require [fast-zip.core :as z]
             [lark.tree.node :as n]
-            [lark.tree.emit :as emit]
+            [lark.tree.reader :as rd]
             [lark.tree.range :as range]))
 
+(def prefix-parents (reduce-kv (fn [parents tag [_ right-bracket]]
+                                 (if (nil? right-bracket)
+                                   (conj parents tag)
+                                   parents)) #{} rd/edges))
+
 (defn include-prefix-parents [loc]
-  (if (emit/prefix-parent? (some-> (z/up loc) (z/node) :tag))
-    (include-prefix-parents (z/up loc))
-    loc))
+  (when loc
+    (if (contains? prefix-parents (some-> (z/up loc)
+                                               (z/node)
+                                               (get :tag)))
+      (include-prefix-parents (z/up loc))
+      loc)))
+
+(defn iterate-including [f x]
+  (iterate f (f x)))
 
 (defn child-locs [loc]
   (take-while identity (iterate z/right (z/down loc))))
+
+(defn right-up [loc]
+  (or (z/right loc)
+      (some-> (z/up loc)
+              (include-prefix-parents))))
+
+(defn left-up [loc]
+  (or (z/left loc)
+      (some-> (z/up loc)
+              (include-prefix-parents))))
+
 (defn right-locs [loc]
-  (take-while identity (iterate z/right (z/right (include-prefix-parents loc)))))
+  (->> (z/right loc)
+       (include-prefix-parents)
+       (iterate z/right)
+       (take-while identity)))
+
 (defn left-locs [loc]
-  (take-while identity (iterate z/left (z/left (include-prefix-parents loc)))))
+  (->> (z/left loc)
+       (include-prefix-parents)
+       (iterate z/left)
+       (take-while identity)))
+
+(defn before? [pos1 pos2]
+  (and (<= (get pos1 :line) (get pos2 :line))
+       (< (get pos1 :column) (get pos2 :column))))
+
+(defn after? [pos1 pos2]
+  (and (>= (get pos1 :line) (get pos2 :line))
+       (> (get pos1 :column) (get pos2 :column))))
 
 (defn navigate
   "Navigate to a position within a zipper (returns loc) or ast (returns node)."
   [ast pos]
-  (if (map? ast)
-    (when (range/within? ast pos)
-      (if
-        (or (n/terminal-node? ast) (not (seq (get ast :value))))
-        ast
-        (or (some-> (filter #(range/within? % pos) (get ast :value))
-                    first
-                    (navigate pos))
-            (when-not (= :base (get ast :tag))
-              ast))))
+  (assert pos)
+  (if (= (type ast) z/ZipperLocation)
     (let [loc ast
-          {:keys [value] :as node} (z/node loc)
+          {:keys [children] :as node} (z/node loc)
           found (when (range/within? node pos)
                   (if
-                    (or (n/terminal-node? node) (not (seq value)))
+                   (or (n/terminal-node? node)
+                       (empty? children))
                     loc
                     (or
-                      (some-> (filter #(range/within? % pos) (child-locs loc))
-                              first
-                              (navigate pos))
-                      ;; do we want to avoid 'base'?
-                      loc #_(when-not (= :base (get node :tag))
-                              loc))))]
+                     (some-> (filter #(range/within? % pos) (child-locs loc))
+                             first
+                             (navigate pos))
+                     ;; do we want to avoid 'base'?
+                     loc #_(when-not (= :base (get node :tag))
+                             loc))))]
       (if (let [found-node (some-> found z/node)]
             (and (= (get pos :line) (get found-node :end-line))
                  (= (get pos :column) (get found-node :end-column))))
         (or (z/right found) found)
-        found))))
+        found))
+    (when (range/within? ast pos)
+      (if
+       (or (n/terminal-node? ast)
+           (empty? (get ast :children)))
+        ast
+        (or (some-> (filter #(range/within? % pos) (get ast :children))
+                    first
+                    (navigate pos))
+            (when-not (= :base (get ast :tag))
+              ast))))))
 
 (defn mouse-eval-region
   "Select sexp under the mouse. Whitespace defers to parent."

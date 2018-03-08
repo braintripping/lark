@@ -117,7 +117,6 @@
    (->> @registry/mappings
         (keep (fn [[keyset {:keys [exec]}]]
                 (when (set/subset? modifiers-down keyset)
-                  ;; change this later for multi-step keysets
                   (some->> (seq exec)
                            (map (partial get-command current-context))
                            (filter :exec?)))))
@@ -139,7 +138,6 @@
   [binding binding-vec]
   (let [binding-set       (set binding-vec)
         command-names     (seq (registry/get-keyset-commands binding-set))
-        which-key-active? (:which-key/active? @state)
         context           (when command-names
                             (get-context {:binding     binding
                                           :binding-vec binding-vec}))

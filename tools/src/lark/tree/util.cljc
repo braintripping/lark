@@ -18,3 +18,13 @@
   [coll x]
   `(or ~@(for [option coll]
            `(identical? ~option ~x))))
+
+(defn some-str [s]
+  (when (and (string? s) (not (identical? s "")))
+    s))
+
+(defn guard-> [x f]
+  (when (f x) x))
+
+(defn guard->> [f x]
+  (when (f x) x))

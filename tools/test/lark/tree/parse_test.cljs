@@ -3,7 +3,8 @@
             [lark.tree.core :as tree]
             [clojure.test :refer-macros [deftest is are testing]]
             [fast-zip.core :as z]
-            [lark.tree.emit :as emit]))
+            [lark.tree.emit :as emit]
+            [lark.tree.format :as format]))
 
 (def shape tree/shape)
 
@@ -196,7 +197,7 @@
     ))
 
 (deftest prettify
-  (binding [emit/*prettify* true]
+  (binding [format/*prettify* true]
 
     (are [in out]
       (= (emit/string (parse/ast in))

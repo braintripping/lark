@@ -1,0 +1,15 @@
+{
+  "scripts": {
+    "deps": "npm install && cp -r node_modules/monaco-editor-core/ public/js/monaco",
+    "watch": "shadow-cljs watch browser"
+  },
+  "dependencies": {
+    "@braintripping/keypress.js": "github:braintripping/Keypress#de62f6ec",
+    "codemirror": "^5.35.0",
+    "monaco-editor-core": "^0.10.1",
+    "react": "^16.2.0",
+    "react-dom": "^16.2.0",
+    "requirejs": "^2.3.5",
+    "shadow-cljs": "^2.2.6"
+  }
+}
