@@ -35,7 +35,8 @@
                                 :newline
                                 :comma
                                 :comment
-                                :comment-block]
+                                :comment-block
+                                :unmatched-delimiter]
                                (get node :tag)))
 
 (def may-contain-children? (complement terminal-node?))

@@ -6,9 +6,6 @@
             [lark.tree.node :as node]
             [lark.tree.parse :as parse]))
 
-;; questions about representing invalid forms
-
-#_(let [a (parse/ast*)])
 (defn emit-node-with-decoration [{:keys [tag options children] :as node
                                   {:keys [invalid? error]} :options}]
   (let [possibly-children? (t/may-contain-children? node)]
@@ -16,30 +13,13 @@
       (let [[l r] (node/edges node)]
         [:span (get options :prefix) l (map emit-node-with-decoration children) r])
       (cond->> (emit/string node)
-               invalid? (conj [:span.red])))
-    #_(cond
-        (t/whitespace? node) children
-
-        (= :token tag) (cond->> (emit/string node)
-                                invalid? (conj [:span.red]))
-
-        (= tag :error) [:div.br2.pa1.bg-red.white.flex-none.inline-block (str (:tag options))]
-        :else
-        (cond-> [:div.br2.pa1.monospace.f7
-                 (when possibly-children?
-                   {:style {:background-color "rgba(0,0,0,0.05)"}})
-                 (if invalid?
-                   [:span.red (str tag)]
-                   (str tag))]
-                possibly-children? (into
-                                    (mapv emit-node-with-decoration children))
-                (= :missing-delimiter (:tag error))
-                (conj [:span.red (:expected error)])))))
+               invalid? (conj [:span.red])))))
 
 (defn emit-node-structure
   [{:keys [tag options children] :as node}]
   (let [tag (cond->> (str tag)
-                     (:invalid? options) (conj [:span.red]))]
+                     (:invalid? options) (conj [:span.red])
+                     (node/whitespace? node) (conj [:span.moon-gray]))]
     (if-not (node/may-contain-children? node)
       tag
       (-> [:span \[ [:span.b tag]]
@@ -55,7 +35,7 @@
   [{:keys [view/state]}]
   (let [value (:value @state)
         {:as node
-         :keys [children invalid-nodes]} (time (parse/ast value))
+         :keys [children invalid-nodes]} (parse/ast value)
         emitted (emit/string node)]
     [:div.bb.b--near-white.mv3.flex
      {:style {:white-space "pre-wrap"}}
