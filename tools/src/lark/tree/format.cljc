@@ -87,8 +87,6 @@
 (defn pad-chars?
   "Returns true if space should be left inbetween characters c1 and c2."
   [c1 c2]
-  (prn c1 c2)
-  (doto (cond (rd/close-bracket? c2) false
-              (rd/open-bracket? c1) false
-              :else true)
-    (prn)))
+  (cond (rd/close-bracket? c2) false
+        (rd/open-bracket? c1) false
+        :else true))

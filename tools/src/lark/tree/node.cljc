@@ -30,8 +30,6 @@
                                 :number
                                 :symbol
                                 :token
-                                :regex
-                                :var
                                 :keyword
                                 :space
                                 :newline

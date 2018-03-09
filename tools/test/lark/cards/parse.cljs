@@ -59,7 +59,7 @@
         emitted (emit/string node)]
     [:div.bb.b--near-white.mv3.flex
      {:style {:white-space "pre-wrap"}}
-     [:.pa2 {:style {:width "25%" :height 50}}
+     [:.pa2 {:style {:width "25%" :height 40}}
       (CodeView {:value value
                  :error-ranges invalid-nodes
                  :on-update #(swap! state assoc :value %)})]

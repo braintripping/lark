@@ -39,11 +39,15 @@
 (defn wrap-children [loc children]
   (let [{:as node
          :keys [tag]} (z/node loc)
-        [left right] (get edges tag)]
-    (binding [format/*indent-level* (format/child-depth* node (count left) {:threading? (some-> loc
-                                                                                                (z/up)
-                                                                                                (z/node)
-                                                                                                (format/threading-node?))})]
+        [left right] (get rd/edges tag)
+        threading? (and (some? right)                       ;; avoid threading-check as fast as possible
+                        (= :list tag)
+                        (some-> loc
+                                (z/up)
+                                (z/node)
+                                (format/threading-node?)))]
+    (binding [format/*indent-level* (format/child-depth* node (count left) (when threading?
+                                                                             {:threading? threading?}))]
       (str left
            (apply str (mapv string children))
            right))))
@@ -87,6 +91,7 @@
               :quote
               :reader-macro
               :reader-conditional
+              :reader-conditional-splice
               :set
               :syntax-quote
               :uneval

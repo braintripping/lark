@@ -209,7 +209,7 @@
     nil (rd/InvalidToken! :reader-macro "#")
     \{ (take-n-children reader :set \# 1 :map)
     \( (take-n-children reader :fn \# 1 :list)
-    \" (take-printable-children reader :regex 1)
+    \" (take-n-children reader :regex \# 1 :string)
     \^ (do (r/read-char reader)
            (take-n-children reader :reader-meta "#^" 2))
     \' (do (r/read-char reader)
@@ -224,7 +224,7 @@
                           \@ (do (r/read-char reader)
                                  :reader-conditional-splice)
                           nil)]
-             (take-n-children reader tag (str \? (when (= ch \@ \@))) 1 :list)
+             (take-n-children reader tag (str "#?" (when (= ch \@ \@))) 1 :list)
              (rd/InvalidToken! :reader-macro "#?"))))
     ;; TODO
     ;; namespaced maps

@@ -5,6 +5,7 @@
             [lark.tree.node :as n]
             [lark.tree.nav :as nav]
             [lark.tree.range :as range]
+            [lark.tree.reader :as rd]
             [fast-zip.core :as z]))
 
 ;; Parse
@@ -23,7 +24,7 @@
 
 (def string emit/string)
 (def sexp emit/sexp)
-(defn edges [node] (get emit/edges (:tag node)))
+(defn edges [node] (get rd/edges (:tag node)))
 
 ;; Nodes
 
