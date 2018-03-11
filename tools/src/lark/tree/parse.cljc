@@ -93,12 +93,11 @@
     (identical? c \@) :deref
     (identical? c \") :string
     (identical? c \:) :keyword
-    (identical? c \|) :cursor
     :else :token))
 
 (defn printable-only? [n]
   (or
-   (contains-identical-keyword? [:space :comma :newline :comment :comment-block :cursor :selection]
+   (contains-identical-keyword? [:space :comma :newline :comment :comment-block]
                                 (:tag n))
    (get-in n [:options :invalid?])))
 
@@ -178,6 +177,7 @@
   ([reader tag prefix n] (take-n-children reader tag prefix n nil))
   ([reader tag prefix n first-printable-child-tag]
    (let [[line col] (rd/current-pos reader)
+         offset (rd/current-offset reader)
          [valid? children after] (rd/take-children reader {:read-fn parse-next
                                                            :count-pred (complement printable-only?)
                                                            :take-n n})]
@@ -190,7 +190,12 @@
            (cond-> (seq after)
                    (rd/Splice after)))
        (rd/Splice
-        (rd/InvalidToken! tag prefix [line (- col (count prefix)) line col])
+        (rd/InvalidToken! tag prefix [line
+                                      (- col (count prefix))
+                                      line
+                                      col
+                                      (- offset (count prefix))
+                                      offset])
         (into children after))))))
 
 #_(defn try-take-all-children [reader tag]
@@ -257,9 +262,6 @@
                                                     (fn [x]
                                                       (or (nil? x) (#{\newline \return} x))))))
 
-      :cursor (do (rd/ignore reader)
-                  (rd/CursorNode! (rd/current-pos reader)))
-
       (:deref
        :quote
        :syntax-quote) (do (r/read-char reader)
@@ -307,94 +309,22 @@
 
 (defn ast
   [s]
-  (binding [rd/*invalid-nodes* (volatile! [])
-            rd/*cursor* (volatile! nil)]
+  (binding [rd/*invalid-nodes* (volatile! [])]
     (let [reader (indexing-reader s)]
 
       (as-> (rd/->Node :base nil nil nil nil) base
             (rd/conj-children base reader {:read-fn parse-next})
             (rd/assoc-range! base [0 0
-                                   (r/get-line-number reader) (r/get-column-number reader)])
-            (let [[source children] (reduce (fn [[source values prev-offset] node]
-                                              (let [s (emit/string prev-offset node)]
-                                                [(str source s)
-                                                 (conj values (assoc node :source s))
-                                                 (count (re-find #"[^\n]$" s))]))
-                                            ["" [] 0] (get base :children))]
+                                   (r/get-line-number reader) (r/get-column-number reader)
+                                   0 (count s)])
+            (let [[source children] (reduce (fn [[source values] {:as node
+                                                                              :keys [offset end-offset]}]
+                                              (let [node-str (subs s offset end-offset)]
+                                                [(str source node-str)
+                                                 (conj values (assoc node :source node-str))]))
+                                            ["" []] (get base :children))]
               (assoc base
                 :source source
                 :children children
-
                 :invalid-nodes (util/guard-> @rd/*invalid-nodes*
-                                             (comp not empty?))
-                :cursor @rd/*cursor*))))))
-
-(defn read-one [s]
-  (rd/read-with-position (indexing-reader s) parse-next*))
-
-(defn normalize-comment-line [s]
-  (string/replace s #"^;+\s?" ""))
-
-(comment
-
- ;; IN PROGRESS
- ;; thinking about a better way to group comment and code blocks
- ;; ...contemplating a transducer, or similar thing?
-
- (defn conj-while [[out in] xform]
-   (loop [out out
-          in in]
-     (if-let [form (xform (peek in))]
-       (recur (update-in out [(dec (count out)) :value] conj form)
-              (subvec in 1))
-       [out in])))
-
- (groups {:comment-block {:init {:tag :comment-block
-                                 :value ""}
-                          :pred comment-block-child?
-                          :conj (fn [oldval node]
-                                  (str oldval (-> (emit/string node)
-                                                  (normalize-comment-line))))}
-          :code-block {:init {:tag :base
-                              :value []}
-                       :pred (complement comment-block-child?)
-                       :conj (fn [oldval node]
-                               (conj oldval node))}} nodes))
-
-(defn group-comment-blocks
-  "Put consecutive top-level whitespace and comment nodes into :comment-blocks"
-  [ast]
-  (update ast :children
-          (fn [nodes]
-            (->> nodes
-                 (reduce
-                  (fn [out node]
-                    (let [prev-tag (get (peek out) :tag)
-                          current-tag (get node :tag)
-                          in-comment-block? (= prev-tag :comment-block)
-                          target (case current-tag
-                                   (:newline :comment) :comment-block
-                                   :space (if in-comment-block? :comment-block :code-block)
-                                   :code-block)]
-                      (case target
-                        :comment-block
-                        (if (= :comment-block prev-tag)
-                          (update-in out [(dec (count out)) :value] str (-> (emit/string node)
-                                                                            (normalize-comment-line)))
-                          (conj out (assoc node
-                                      :tag :comment-block
-                                      :value (normalize-comment-line (emit/string node)))))
-                        :code-block
-                        (if (= :base prev-tag)
-                          (update-in out [(dec (count out)) :children] conj node)
-                          (conj out (rd/->Node :base nil nil nil [node]))))))
-                  [])))))
-
-(defn shape [{:keys [tag children] :as node}]
-  (if (= tag :base)
-    (mapv shape children)
-    (if (n/may-contain-children? node)
-      (into [tag] (mapv shape children))
-      tag)))
-
-(shape (group-comment-blocks (ast " ;hi")))
+                                             (comp not empty?))))))))

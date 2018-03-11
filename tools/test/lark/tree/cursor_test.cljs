@@ -37,45 +37,43 @@
        (first)))
 
 (deftest resolving-paths
-  (binding [format/*prettify* true]
-    (doall
-     (for [[in-str path sexp] '[["(a b)" [0] (a b)]
-                                ["(a b)" [0 0] a]
-                                ["(a b)" [0 1] b]
-                                ["(a b)" [0 2] nil]
-                                ["( a b )" [0 0] a]
-                                ["( a  b)" [0 1] b]
-                                ["( ( a))" [0 0 0] a]
-                                [" \n a" [1] a]
-                                ["(a\n b)" [0 2] b]]
-           :let [ast (tree/string-zip in-str)
-                 ast2 (-> (emit/string ast)
-                          (tree/string-zip))
-                 sexp1 (path-sexp ast path)
-                 sexp2 (path-sexp ast2 path)
+  (doall
+   (for [[in-str path sexp] '[["(a b)" [0] (a b)]
+                              ["(a b)" [0 0] a]
+                              ["(a b)" [0 1] b]
+                              ["(a b)" [0 2] nil]
+                              ["( a b )" [0 0] a]
+                              ["( a  b)" [0 1] b]
+                              ["( ( a))" [0 0 0] a]
+                              [" \n a" [1] a]
+                              ["(a\n b)" [0 2] b]]
+         :let [ast (tree/string-zip in-str)
+               ast2 (-> (tree/format ast)
+                        (tree/string-zip))
+               sexp1 (path-sexp ast path)
+               sexp2 (path-sexp ast2 path)
 
-                 resolved-loc (when sexp (sexp-loc ast2 sexp))
-                 resolved-sexp (when sexp (tree/sexp (z/node resolved-loc)))
-                 resolved-path (if sexp
-                                 (nav/get-path resolved-loc)
-                                 path)
+               resolved-loc (when sexp (sexp-loc ast2 sexp))
+               resolved-sexp (when sexp (tree/sexp (z/node resolved-loc)))
+               resolved-path (if sexp
+                               (nav/get-path resolved-loc)
+                               path)
 
-                 error-info (merge (when (not= sexp sexp1 sexp2)
-                                     {:SEXP-ast1 sexp1
-                                      :SEXP-ast2 sexp2})
-                                   (when (not= sexp resolved-sexp)
-                                     {::RESOLVE-sexp resolved-sexp})
-                                   (when (not= resolved-path path)
-                                     {:RESOLVE-loc resolved-loc
-                                      :RESOLVE-path resolved-path}))]
-           #_:when #_(not (empty? error-info))
-           ]
-       (is (empty? error-info)
-           (merge error-info
-                  {:in-str in-str
-                   :in-path path
-                   :in-sexp sexp}))))))
-
+               error-info (merge (when (not= sexp sexp1 sexp2)
+                                   {:SEXP-ast1 sexp1
+                                    :SEXP-ast2 sexp2})
+                                 (when (not= sexp resolved-sexp)
+                                   {::RESOLVE-sexp resolved-sexp})
+                                 (when (not= resolved-path path)
+                                   {:RESOLVE-loc resolved-loc
+                                    :RESOLVE-path resolved-path}))]
+         #_:when #_(not (empty? error-info))
+         ]
+     (is (empty? error-info)
+         (merge error-info
+                {:in-str in-str
+                 :in-path path
+                 :in-sexp sexp})))))
 
 (doall (for [[in-str in-sexp in-sticky in-formatted]
              '[["(a| b)" a :outer-right "(a| b)"]
@@ -107,10 +105,9 @@
 
                    ;; format the code and put in a new editor
                    formatted-str (tree/format (.getValue editor))
+                   formatted-zipper (tree/string-zip formatted-str)
                    formatted-editor (doto editor
                                       (.setValue formatted-str))
-                   formatted-zipper (:zipper formatted-editor)
-
                    ;; resolve loc in formatted editor
                    formatted-resolved-loc (nav/get-loc formatted-zipper path)
                    formatted-resolved-sexp (some-> formatted-resolved-loc
@@ -118,7 +115,13 @@
                                                    (tree/sexp))
 
                    ;; putting cursor back into formatted editor
-                   formatted-cursor (cursor/position formatted-zipper cursor-path)
+                   formatted-cursor (try (cursor/position formatted-zipper cursor-path)
+                                         (catch js/Error e
+                                           (prn :NO_WORK
+                                                {:cursor-path cursor-path
+                                                 :in-str in-str
+                                                 :formatted-str formatted-str
+                                                 :f-resolved-loc formatted-resolved-loc})))
                    _ (doto formatted-editor
                        (.setCursor (cm/range->Pos formatted-cursor))
                        (utils/serialize-selections!))
@@ -143,5 +146,5 @@
  (let [ast (tree/string-zip "(((a b)))")]
    (nav/get-loc ast [0 0 0]))
 
- (binding [format/*prettify* true]
+ (binding [format/*pretty* true]
    (emit/string (parse/ast "(a\n    )"))))

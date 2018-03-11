@@ -252,31 +252,35 @@
 ;; todo
 ;; cursor tracking w/ AST
 #_(defn highlight-cursor! [cm cursor]
-  (some-> (get cm :cursor/handle)
-          (.clear))
-  (swap! cm assoc :cursor/handle
-         (.setBookmark cm (range->Pos cursor) #js {:widget (cursor-bookmark)})))
+    (some-> (get cm :cursor/handle)
+            (.clear))
+    (swap! cm assoc :cursor/handle
+           (.setBookmark cm (range->Pos cursor) #js {:widget (cursor-bookmark)})))
+
+(defn set-zipper! [editor zipper]
+  (swap! editor merge {:zipper zipper
+                       :ast (z/node zipper)})
+  (when-let [on-ast (get-in editor [:view :on-ast])]
+    (on-ast zipper)))
 
 (defn update-ast!
-  [{:keys [ast] :as cm}]
-  (let [{:keys [invalid-nodes cursor] :as next-ast} (try (tree/ast (.getValue cm))
-                                                         (catch js/Error e
-                                                           (prn "error in update-ast!" e)
-                                                           (js/console.log (.-stack e))
-                                                           {:errors []}))]
-    (highlight-parse-errors! cm invalid-nodes)
-    (when (not= next-ast ast)
-      (when-let [on-ast (-> cm :view :on-ast)]
-        (on-ast next-ast))
-      (let [next-zip (tree/ast-zip next-ast)]
-        (swap! cm merge {:ast next-ast
-                         :zipper next-zip
-                         :ast/cursor cursor})))))
+  [{{:as ast
+     ast-source :source} :ast :as editor}]
+  (let [value (.getValue editor)]
+    (when (or (nil? ast-source)
+              (not= ast-source value))
+      (let [{:keys [invalid-nodes] :as next-ast} (try (tree/ast value)
+                                                      (catch js/Error e
+                                                        (prn "error in update-ast!" e)
+                                                        (js/console.log (.-stack e))
+                                                        {:errors []}))]
+        (highlight-parse-errors! editor invalid-nodes)
+        (when (not= next-ast ast)
+          (set-zipper! editor (tree/ast-zip next-ast)))))))
 
 (defn update-cursor!
   [{:keys [zipper magic/brackets?]
-    {prev-pos :pos prev-zipper :loc-root} :magic/cursor
-    cursor :ast/cursor
+    {prev-pos :pos prev-zipper :prev-zipper} :magic/cursor
     :as cm} & [force?]]
   (when (or (.hasFocus cm) (nil? prev-zipper) force?)
     (when-let [pos (pos->boundary (get-cursor cm))]
@@ -292,7 +296,7 @@
                                                   :bracket-loc bracket-loc
                                                   :bracket-node bracket-node
                                                   :pos pos
-                                                  :loc-root zipper})))))))
+                                                  :prev-zipper zipper})))))))
 
 (defn require-opts [cm opts]
   (doseq [opt opts] (.setOption cm opt true)))
@@ -332,9 +336,9 @@
 
   ITransientAssociative
   (-assoc! [this key val]
-   (assert (= key :ast))
-   (swap! this assoc :ast val)
-   (update-ast! this))
+    (assert (= key :ast))
+    (swap! this assoc :ast val)
+    (update-ast! this))
 
   Editor/IKind
   (kind [this] :code)

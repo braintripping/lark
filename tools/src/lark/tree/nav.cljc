@@ -109,7 +109,17 @@
       loc
       (recur pred (z/up loc)))))
 
-(defn path-loc-pred [{:keys [tag]}]
+(defn cursor-space-node [zipper pos]
+  (when-let [loc (navigate zipper pos)]
+    (->> [loc (z/left loc)]
+         (keep #(when (and % (-> %
+                                 (z/node)
+                                 (get :tag)
+                                 (= :space)))
+                  (z/node %)))
+         (first))))
+
+(defn path-node-pred [{:keys [tag]}]
   (or (= tag :newline)
       (not (rd/whitespace-tag? tag))))
 
@@ -120,14 +130,11 @@
             (empty? segments))
       loc
       (recur (rest segments)
-             (try
-               (->> (iterate z/right (z/down loc))
-                    (take-while identity)
-                    (filter (comp path-loc-pred z/node))
-                    (drop (first segments))
-                    (first))
-               (catch js/Error e
-                 (prn :WTF (iterate z/right (z/down loc)))))))))
+             (->> (iterate z/right (z/down loc))
+                  (take-while identity)
+                  (filter (comp path-node-pred z/node))
+                  (drop (first segments))
+                  (first))))))
 
 (defn get-path [loc]
   (loop [loc loc
@@ -136,5 +143,11 @@
       (drop 1 out)
       (recur (z/up loc)
              (cons (->> (z/lefts loc)
-                        (filter path-loc-pred)
+                        (filter path-node-pred)
                         (count)) out)))))
+
+(defn find-next [ast pred]
+  (->> (iterate z/next ast)
+       (take-while #(and % (not (z/end? %))))
+       (filter (comp pred z/node))
+       (first)))

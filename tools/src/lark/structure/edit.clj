@@ -1,7 +1,5 @@
 (ns lark.structure.edit)
 
-(def edit 'edit)
-
 (defmacro operation
   "Wraps `body` in a CodeMirror operation, and returns the array of changes made by the operation."
   [editor & body]
@@ -17,7 +15,14 @@
   ;; - a `format` command which returns a "formatted ast"
   ;; - set contents of editor via AST instead of string
   ;; first, eval `body`. assume that cursor is left in correct position.
-  `(let [res# (do ~@body)]
-     (when res#
-       (~'lark.structure.edit/format! ~editor))
-     res#))
+  (let [[opts body] (if (or (map? (first body))
+                            (symbol? (first body)))
+                      [(first body) (rest body)]
+                      [nil body])]
+    `(~'.operation ~editor
+      (fn []
+        (let [res# (do ~@body)
+              editor# ~editor]
+          (when-not (false? res#)
+            (~'lark.structure.edit/format! editor# ~opts))
+          res#)))))

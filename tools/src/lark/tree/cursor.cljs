@@ -3,70 +3,77 @@
             [fast-zip.core :as z]
             [lark.tree.node :as n]
             [lark.tree.range :as range]
+            [lark.tree.reader :as r]
             [lark.tree.util :as util]))
 
-(defn path [loc pos]
-  (let [loc (nav/navigate loc pos)
-        node (z/node loc)
-        [loc sticky data] (or #_(when (n/newline? node)
-                                [loc :outer-right])
-                              (when-let [inner-range (and (n/has-edges? node)
-                                                          (range/inner-range node))]
-                                (cond (range/pos= pos inner-range)
-                                      [loc :inner-left]
-                                      (range/pos= pos (range/end->start inner-range))
-                                      [loc :inner-right]))
-                              (when-let [adjacent-loc (->> [loc (z/left loc) (z/right loc)]
-                                                           (remove nil?)
-                                                           (filter (comp nav/path-loc-pred z/node))
-                                                           (first))]
-                                (let [adjacent-node (z/node adjacent-loc)]
-                                  (cond (range/pos= pos adjacent-node)
-                                        [adjacent-loc :outer-left]
-                                        (range/pos= pos (range/end->start adjacent-node))
-                                        [adjacent-loc :outer-right])))
-                              (when (some-> (z/up loc)
-                                            (z/node)
-                                            (range/inner-range)
-                                            (range/pos= pos))
-                                [(z/up loc) :inner-left])
-                              (when (and (not (n/whitespace? node))
-                                         (n/terminal-node? node)
-                                         (range/within? node pos))
-                                [loc :terminal-offset [(- (:line pos) (:line node))
-                                                       (- (:column pos) (:column node))]])
-                              (when (and (nil? (z/right loc))
-                                         (z/up loc))
-                                [(z/up loc) :inner-right])
+(defn pos-offset [node pos]
+  [(- (:line pos) (:line node))
+   (- (:column pos) (:column node))])
 
-                              (when (some-> (z/left loc)
-                                            (z/node)
-                                            (range/end->start)
-                                            (= pos))
-                                [(z/left loc) :outer-right])
+(defn path [zipper pos]
+  (if-let [cursor-loc (and r/*active-cursor-node*
+                           (nav/find-next zipper #(= % r/*active-cursor-node*)))]
+    [0 cursor-loc :terminal-offset (pos-offset r/*active-cursor-node* pos)]
+    (let [loc-at-pos (nav/navigate zipper pos)
+          node (z/node loc-at-pos)
+          [i loc sticky data] (or
 
-                              (when-let [loc (first (->> (nav/right-locs loc)
-                                                         (take-while (comp (complement n/newline?) z/node))
-                                                         (filter (comp (complement n/whitespace?) z/node))))]
-                                [loc :outer-left])
-                              (when-let [loc (or (some-> loc
-                                                         (util/guard-> (comp n/newline? z/node)))
-                                                 (first (->> (nav/left-locs loc)
-                                                             (take-while (comp (complement n/newline?) z/node))
-                                                             (filter (comp (complement n/whitespace?) z/node)))))]
-                                [loc :outer-right])
-                              (when-let [loc (->> [loc (z/up loc)]
-                                                  (keep identity)
-                                                  (filter (comp #(range/pos= node %)
-                                                                range/inner-range
-                                                                z/node))
-                                                  (first))]
-                                [loc :inner-left])
-                              [loc :not-found])]
-    (assert (nav/path-loc-pred (z/node loc)))
-    [(nav/get-path loc)
-     sticky
-     data]))
+                               (when-let [inner-range (and (n/has-edges? node)
+                                                           (range/inner-range node))]
+                                 (cond (range/pos= pos inner-range)
+                                       [1 loc-at-pos :inner-left]
+                                       (range/pos= pos (range/end->start inner-range))
+                                       [2 loc-at-pos :inner-right]))
+                               (when-let [adjacent-loc (->> [loc-at-pos (z/left loc-at-pos) (z/right loc-at-pos)]
+                                                            (remove nil?)
+                                                            (filter (comp nav/path-node-pred z/node))
+                                                            (first))]
+                                 (let [adjacent-node (z/node adjacent-loc)]
+                                   (cond (range/pos= pos adjacent-node)
+                                         [3 adjacent-loc :outer-left]
+                                         (range/pos= pos (range/end->start adjacent-node))
+                                         [4 adjacent-loc :outer-right])))
+                               (when (some-> (z/up loc-at-pos)
+                                             (z/node)
+                                             (range/inner-range)
+                                             (range/pos= pos))
+                                 [5 (z/up loc-at-pos) :inner-left])
+                               (when (and (not (n/whitespace? node))
+                                          (n/terminal-node? node)
+                                          (range/within? node pos))
+                                 [6 loc-at-pos :terminal-offset (pos-offset node pos)])
+                               (when (and (nil? (z/right loc-at-pos))
+                                          (z/up loc-at-pos))
+                                 [7 (z/up loc-at-pos) :inner-right])
+
+                               (when (some-> (z/left loc-at-pos)
+                                             (z/node)
+                                             (util/guard-> nav/path-node-pred)
+                                             (range/end->start)
+                                             (= pos))
+                                 [8 (z/left loc-at-pos) :outer-right])
+
+                               (when-let [loc (first (->> (nav/right-locs loc-at-pos)
+                                                          (take-while (comp (complement n/newline?) z/node))
+                                                          (filter (comp (complement n/whitespace?) z/node))))]
+                                 [9 loc :outer-left])
+                               (when-let [loc (or (some-> loc-at-pos
+                                                          (util/guard-> (comp n/newline? z/node)))
+                                                  (first (->> (nav/left-locs loc-at-pos)
+                                                              (take-while (comp (complement n/newline?) z/node))
+                                                              (filter (comp (complement n/whitespace?) z/node)))))]
+                                 [10 loc :outer-right])
+                               (when-let [loc (->> [loc-at-pos (z/up loc-at-pos)]
+                                                   (keep identity)
+                                                   (filter (comp #(range/pos= node %)
+                                                                 range/inner-range
+                                                                 z/node))
+                                                   (first))]
+                                 [11 loc :inner-left])
+                               [12 loc-at-pos :not-found])]
+      [(nav/get-path loc)
+       sticky
+       data])))
 
 
 (defn position [zipper [path sticky data]]

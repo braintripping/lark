@@ -15,8 +15,29 @@
             [clojure.string :as str]
             [lark.tree.format :as format]
             [lark.tree.node :as n]
-            [lark.tree.emit :as emit])
-  (:require-macros [lark.structure.edit :refer [operation]]))
+            [lark.tree.emit :as emit]
+            [lark.tree.reader :as r])
+  (:require-macros [lark.structure.edit :as edit :refer [operation]]))
+
+(defn format!
+  ([editor] (format! editor {}))
+  ([editor {:keys [preserve-cursor-space?]}]
+   (binding [lark.tree.format/*pretty* true]
+     (let [pre-val (.getValue editor)
+           pre-zipper (tree/string-zip pre-val)
+           pre-pos (cm/pos->boundary (cm/get-cursor editor))
+           post-val (binding [r/*active-cursor-node*
+                              (when preserve-cursor-space?
+                                (nav/cursor-space-node pre-zipper pre-pos))]
+                      (tree/format pre-zipper))
+           post-zipper (tree/string-zip post-val)]
+       (when (not= pre-val post-val)                        ;; only mutate editor if value has changed
+         (.setValue editor post-val))
+       (cm/set-zipper! editor post-zipper)
+       (->> (cursor/path pre-zipper pre-pos)                ;; cursor path from pre-format zipper, ignoring whitespace
+            (cursor/position post-zipper)                   ;; returns position in post-format zipper for path
+            (cm/range->Pos)
+            (.setCursor editor))))))
 
 (def other-bracket {\( \) \[ \] \{ \} \" \"})
 (defn spaces [n] (apply str (take n (repeat " "))))
@@ -210,31 +231,19 @@
            (.indexOf "\"()[]{} ")
            (pos?)))
 
-(defn unwrap! [{{:keys [pos loc bracket-node]} :magic/cursor :as cm}]
-  (when (and loc (not (cm/selection? cm)))
-    (when-let [closest-edges-loc (loop [loc (cond-> loc
-                                                    (not (tree/within-inner? bracket-node pos)) (z/up))]
-                                   (cond (not loc) nil
-                                         (tree/has-edges? (z/node loc)) loc
-                                         :else (recur (z/up loc))))]
-      (let [closest-edges-node (z/node closest-edges-loc)]
-        (let [pos (cm/get-cursor cm)
-              [l r] (tree/edges closest-edges-node)]
-          (operation cm
-                     (let [inner-range (tree/inner-range closest-edges-node)
-                           inner-text (cm/range-text cm inner-range)
-                           pad-right? (some-> (last inner-text)
-                                              (parse/boundary?)
-                                              (not))]
-                       (cm/replace-range! cm (str inner-text
-                                                  (when pad-right?
-                                                    (spaces (count r))))
-                                          closest-edges-node)
-                       (cm/set-cursor! cm (cond-> pos
-                                                  (= (:line pos) (:line inner-range))
-                                                  (update :column #(- % (count (first (node/edges closest-edges-node)))))))))))
-
-      true))
+(defn unwrap! [{{:keys [pos loc bracket-node]} :magic/cursor :as editor}]
+  (when (and loc (not (cm/selection? editor)))
+    (when-let [edge-node (loop [loc (cond-> loc
+                                            (not (tree/within-inner? bracket-node pos)) (z/up))]
+                           (cond (not loc) nil
+                                 (tree/has-edges? (z/node loc)) (z/node loc)
+                                 :else (recur (z/up loc))))]
+      (edit/with-formatting editor
+        (let [[l r] (tree/edges edge-node)
+              [left-r right-r] (range/edge-ranges edge-node)]
+          (doseq [[n range] [[(count l) left-r]
+                             [(count r) right-r]]]
+            (cm/replace-range! editor (format/repeat-string " " n) range))))))
   true)
 
 (defn raise! [{{:keys [pos bracket-loc bracket-node]} :magic/cursor :as cm}]
@@ -499,17 +508,3 @@
             (z/children)
             (first)
             (node-symbol))))
-
-(defn format! [editor]
-  (binding [lark.tree.format/*prettify* true]
-    (let [{pre-zipper :zipper
-           {pre-pos :pos} :magic/cursor} editor
-          pre-val (.getValue editor)
-          post-val (emit/string pre-zipper)]
-      (let [_ (when (not= pre-val post-val)                 ;; only mutate editor if value has changed
-                (.setValue editor post-val))
-            {post-zipper# :zipper} editor]
-        (->> (cursor/path pre-zipper pre-pos)               ;; cursor position is part of formatting
-             (cursor/position post-zipper#)
-             (cm/range->Pos)
-             (.setCursor editor))))))

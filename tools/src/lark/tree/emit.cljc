@@ -40,7 +40,7 @@
 (defn wrap-children [start-indent loc children]
   (let [{:as coll-node :keys [tag]} (z/node loc)
         [left right] (get rd/edges tag)]
-    (if-not format/*prettify*
+    (if-not format/*pretty*
       (str left (apply str (mapv (partial string start-indent) children)) right)
       (let [coll-edge-indent (count left)
             body-indent (+ coll-edge-indent (format/body-indent* start-indent loc 0))
@@ -91,10 +91,12 @@
               :number) (str value)
 
              :comma value
-             :space (if format/*prettify*
-                      (when (format/emit-space? loc) " ")
+             :space (if format/*pretty*
+                      (cond (some-> rd/*active-cursor-node*
+                                    (= node)) value
+                            (format/emit-space? loc) " ")
                       value)
-             :newline (if format/*prettify*
+             :newline (if format/*pretty*
                         (str \newline (format/repeat-string format/INDENT indent))
                         value)
 

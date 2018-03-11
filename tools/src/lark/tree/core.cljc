@@ -7,7 +7,8 @@
             [lark.tree.range :as range]
             [lark.tree.reader :as rd]
             [fast-zip.core :as z]
-            [lark.tree.format :as format]))
+            [lark.tree.format :as format]
+            [lark.tree.ext :as ext]))
 
 ;; Parse
 
@@ -64,11 +65,10 @@
 (def node-highlights range/node-highlights)
 
 (defn format [x]
-  (binding [format/*prettify* true]
-    (-> x
-        (cond->
-         (string? x) (parse/ast))
-        (emit/string))))
+  (let [x (cond-> x
+                  (string? x) (parse/ast))]
+    (binding [format/*pretty* true]
+      (emit/string x))))
 
 (comment
 
@@ -112,5 +112,5 @@
           _ (.profileEnd js/console)]
       (println :cljs-core-string-verify (= (emit/string ast) sample-code-string))))
 
-(def shape parse/shape)
-(def group-comment-blocks parse/group-comment-blocks)
+(def shape ext/shape)
+(def group-comment-blocks ext/group-comment-blocks)

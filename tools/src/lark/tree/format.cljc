@@ -15,7 +15,7 @@
       out
       (recur (inc i) (str out content)))))
 
-(def ^:dynamic *prettify* false)
+(def ^:dynamic *pretty* false)
 
 (defn emit-space? [loc]
   (and (some? (z/left loc))
@@ -45,68 +45,6 @@
           (re-find #"with|when|if" x) 1
           ;(str/ends-with? x "->") 1
           :else 0)))
-'[
-
-  (->
-   {})
-
-  (-> {}
-      (assoc :a 1))
-
-  (assoc {} :a 1
-            :b 2)
-
-  (assoc {}
-    :a 1
-    :b 2)
-
-  (-> {}
-      (assoc
-        :a 1))
-
-  (+
-   1
-   2)
-
-  (+ 1
-     2)
-
-  (a b c d e
-     )
-
-  (1 2
-   3)
-
-  (do 1 2
-      3)
-
-  (let [x 1] 2
-             3)
-
-  (let [x 1]
-    2
-    3)
-
-  (let
-   [x 1]
-    2
-    3)
-
-  #{1
-    2 [1
-       2]}
-
-  (a
-   []
-   1)
-  (a
-   b
-   c)
-  (a b
-     c)
-
-  ]
-
 (defn threading-node?
   [node]
   (when-let [operator (and (= (get node :tag) :list)

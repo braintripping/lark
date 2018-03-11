@@ -8,18 +8,19 @@
   #?(:cljs (:import [goog.string StringBuffer])))
 
 (def ^:dynamic *invalid-nodes* nil)
-(def ^:dynamic *cursor* nil)
+(def ^:dynamic *active-cursor-node* nil)
 
 (def ^:dynamic *delimiter* (list))
 
 (def peek r/peek-char)
 
-(comment
- (defn reader-offset [indexing-pushback-reader]
-   (.. indexing-pushback-reader
-       -rdr
-       -rdr
-       -s_pos)))
+(defn current-offset [indexing-pushback-reader]
+  (let [pushback-reader (.-rdr indexing-pushback-reader)
+        indexing-reader (.-rdr pushback-reader)
+        pushback (- (.-buf_len pushback-reader)
+                    (.-buf_pos pushback-reader))]
+    (- (.-s_pos indexing-reader)
+       pushback)))
 
 (def edges
   {:deref ["@"]
@@ -210,6 +211,8 @@
               :column (nth range 1)
               :end-line (nth range 2)
               :end-column (nth range 3)
+              :offset (nth range 4)
+              :end-offset (nth range 5)
               :options options
               (get options key)))
   (-lookup [this key not-found]
@@ -221,6 +224,8 @@
                   :column (nth range 1)
                   :end-line (nth range 2)
                   :end-column (nth range 3)
+                  :offset (nth range 4)
+                  :end-offset (nth range 5)
                   :options options
                   nil)
         (get options key not-found)))
@@ -253,13 +258,19 @@
   "Use the given function to read value, then attach row/col metadata."
   [reader read-fn]
   (let [start-line (dec (r/get-line-number reader))
-        start-column (dec (r/get-column-number reader))]
+        start-column (dec (r/get-column-number reader))
+        start-offset (current-offset reader)]
     (when-let [node (read-fn reader)]
       (assoc-range!
        node
-       [start-line start-column
+       [start-line
+        start-column
+
         (dec (r/get-line-number reader))
-        (dec (r/get-column-number reader))]))))
+        (dec (r/get-column-number reader))
+
+        start-offset
+        (current-offset reader)]))))
 
 (defn report-invalid! [node]
   (let [node (assoc node :invalid? true)]
@@ -288,11 +299,6 @@
 
 (defn EmptyNode [tag]
   (->Node tag nil nil nil nil))
-
-(defn CursorNode! [position]
-  (let [cur (assoc (EmptyNode :cursor) :range position)]
-    (some-> *cursor*
-            (vreset! cur))))
 
 (defn split-after-n
   "Splits after `n` values which pass `pred`.
@@ -366,21 +372,27 @@
   [coll-node reader {:keys [:read-fn
                             :count-pred]
                      take-n :take-n}]
-  (let [start-pos (current-pos reader)
+  (let [[inner-line inner-col] (current-pos reader)
+        inner-offset (current-offset reader)
         coll-tag (get coll-node :tag)
         invalid-exit (fn [out]
                        (case coll-tag
                          :base (assoc coll-node :children out)
-                         (Splice (let [[line col] start-pos
-                                       [left right] (get edges coll-tag)]
+                         (Splice (let [[left right] (get edges coll-tag)
+                                       width (count left)]
                                    (report-invalid!
-                                    (->Node :unmatched-delimiter
-                                            {:info {:tag coll-tag
-                                                    :direction :forward
-                                                    :expects right}}
-                                            [line (- col (count left)) line col]
-                                            left
-                                            nil))) out)))]
+                                    (-> (EmptyNode :unmatched-delimiter)
+                                        (assoc
+                                          :info {:tag coll-tag
+                                                 :direction :forward
+                                                 :expects right}
+                                          :range [inner-line
+                                                  (- inner-col width)
+                                                  inner-line
+                                                  inner-col
+                                                  (- inner-offset width)
+                                                  inner-offset]
+                                          :value left)))) out)))]
     (loop [reader reader
            i 0
            out []]
