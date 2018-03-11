@@ -4,7 +4,6 @@
             [lark.tree.reader :as rd]
             [lark.tree.node :as n]))
 
-
 (defn normalize-comment-line [s]
   (string/replace s #"^;+\s?" ""))
 

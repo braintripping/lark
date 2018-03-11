@@ -446,10 +446,10 @@
                 (insert! (str " " (tree/string last-child) " ")))
             (cm/replace-range! editor (-> (cm/range-text editor last-child)
                                           (str/replace #"[^\n]" " ")) last-child)
-            (cm/set-cursor! editor (min pos
-                                        (-> (range/inner-range end-edge-node)
-                                            (range/end->start)
-                                            (cm/range->Pos))))))))
+            (cm/set-cursor! editor (first (sort [(cm/range->Pos pos)
+                                                 (-> (range/inner-range end-edge-node)
+                                                     (range/end->start)
+                                                     (cm/range->Pos))])))))))
     true))
 
 
