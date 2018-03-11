@@ -15,8 +15,8 @@
   (assert (not (lt {:line 1 :column 0} {:line 0 :column 0})))
   (assert (not (lt {:line 0 :column 0} {:line 0 :column 0}))))
 
-(defn contains-fn [include-boundaries?]
-  (let [[greater-than less-than] (case include-boundaries?
+(defn contains-fn [include-edges?]
+  (let [[greater-than less-than] (case include-edges?
                                    true [>= <=]
                                    false [> <])]
     (fn within? [container pos]
@@ -34,7 +34,7 @@
                     (if (= end-pos-line end-line) (less-than end-pos-column end-column) true))))))))
 
 (def within? (contains-fn true))
-(def inside? (contains-fn false))
+(def within-inner? (contains-fn false))
 
 (defn edge-ranges [node]
   (when (n/has-edges? node)

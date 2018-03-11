@@ -14,7 +14,8 @@
             [clojure.tools.reader.edn :as edn]
             [clojure.tools.reader :as r]
             [lark.tree.util :as util]
-            [lark.backtick.core :refer [template]]]))
+            [lark.backtick.core :refer [template]]])
+            [clojure.string :as str])
   #?(:cljs (:require-macros [lark.backtick.core :refer [template]]
             [lark.tree.util :as util])))
 
@@ -36,27 +37,43 @@
 
 (declare string)
 
-(defn wrap-children [loc children]
-  (let [{:as node
-         :keys [tag]} (z/node loc)
-        [left right] (get rd/edges tag)
-        threading? (and (some? right)                       ;; avoid threading-check as fast as possible
-                        (= :list tag)
-                        (some-> loc
-                                (z/up)
-                                (z/node)
-                                (format/threading-node?)))]
-    (binding [format/*indent-level* (format/child-depth* node (count left) (when threading?
-                                                                             {:threading? threading?}))]
-      (str left
-           (apply str (mapv string children))
-           right))))
+(defn wrap-children [start-indent loc children]
+  (let [{:as coll-node :keys [tag]} (z/node loc)
+        [left right] (get rd/edges tag)]
+    (if-not format/*prettify*
+      (str left (apply str (mapv (partial string start-indent) children)) right)
+      (let [coll-edge-indent (count left)
+            body-indent (+ coll-edge-indent (format/body-indent* start-indent loc 0))
+            topline-indent (+ coll-edge-indent start-indent)]
+        (str left (loop [out ""
+                         current-indent topline-indent
+                         remaining children]
+                    (if (empty? remaining)
+                      out
+                      (let [child (first remaining)
+                            {:keys [tag] :as child-node} (z/node child)]
+                        (case tag
+                          :newline
+                          (recur
+                           (str out \newline (format/repeat-string format/INDENT body-indent))
+                           body-indent
+                           (rest remaining))
+                          (let [child-str (string current-indent child)
+                                child-multiline? (some-> child-str
+                                                         (str/includes? \newline))]
+                            (recur
+                             (str out child-str)
+                             (if child-multiline? (let [last-line (re-find #"[^\n]*$" child-str)]
+                                                    (count last-line))
+                                                  (+ current-indent (count child-str)))
+                             (rest remaining)))))))
+             right)))))
 
 #_(defn children? [{:keys [tag]}]
     (#{:list :fn :map :meta :set :vector :uneval} tag))
 (defn string
   "Emit ClojureScript string from a magic-tree AST"
-  ([loc]
+  ([indent loc]
    (when (some? loc)
      (if (= (type loc) z/ZipperLocation)
        (let [{:keys [tag value options] :as node} (z/node loc)
@@ -66,7 +83,7 @@
            (case tag
              :unmatched-delimiter value
 
-             :base (apply str (mapv string children))
+             :base (wrap-children 0 loc children)
 
              :token value
 
@@ -74,13 +91,15 @@
               :number) (str value)
 
              :comma value
-             :space (if format/*prettify* " " value)
+             :space (if format/*prettify*
+                      (when (format/emit-space? loc) " ")
+                      value)
              :newline (if format/*prettify*
-                        (str \newline (format/repeat-string format/INDENT format/*indent-level*))
+                        (str \newline (format/repeat-string format/INDENT indent))
                         value)
 
              :selection (when (some? *print-selections*)
-                          (str "‹" (apply str (mapv string children)) "›"))
+                          (wrap-children indent loc children))
 
              :cursor (when (some? *print-selections*) "|")
 
@@ -99,8 +118,8 @@
               :unquote-splicing
               :var
               :vector
-              :regex) (wrap-children loc children)
-             (:meta :reader-meta) (wrap-children loc children)
+              :regex) (wrap-children indent loc children)
+             (:meta :reader-meta) (wrap-children indent loc children)
              :string (str \" value \")
              :comment (str \; value)
              :comment-block (string/join (sequence (comp (map #(if (.test #"^\s*$" %)
@@ -114,10 +133,9 @@
                         (str value))
 
              nil "")))
-       (string (n/ast-zip loc)))))
-  ([ns node]
-   (binding [*ns* (or ns (symbol "cljs.user"))]
-     (string node))))
+       (string indent (n/ast-zip loc)))))
+  ([loc]
+   (string 0 loc)))
 
 (declare sexp)
 
@@ -131,8 +149,10 @@
             (if (tag-for-print-only? tag)
               out
               (let [value (sexp item)]
-                ((if (contains? splice? tag) into conj)
-                 out value)))) [] forms))
+                (if (nil? value)
+                  out
+                  ((if (contains? splice? tag) into conj)
+                   out value))))) [] forms))
 
 (defn sexp [{:keys [tag value children options] :as node}]
   (when node
@@ -188,9 +208,8 @@
                                   (filter (fn [[{feature :value} _]] (contains? *features* feature)))
                                   (first))]
           (if feature
-            (cond-> (sexp form)
-                    (= tag :reader-conditional) (vector))
-            []))
+            (sexp form)
+            nil))
 
         (:meta
          :reader-meta) (let [[m data] (as-code children)]

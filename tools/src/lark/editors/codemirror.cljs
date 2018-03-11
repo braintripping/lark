@@ -275,10 +275,10 @@
 
 (defn update-cursor!
   [{:keys [zipper magic/brackets?]
-    {prev-pos :pos prev-zipper :prev-zipper} :magic/cursor
+    {prev-pos :pos prev-zipper :loc-root} :magic/cursor
     cursor :ast/cursor
-    :as cm}]
-  (when (or (.hasFocus cm) (nil? prev-zipper))
+    :as cm} & [force?]]
+  (when (or (.hasFocus cm) (nil? prev-zipper) force?)
     (when-let [pos (pos->boundary (get-cursor cm))]
       (when (or (not= pos prev-pos)
                 (not= prev-zipper zipper))
@@ -292,7 +292,7 @@
                                                   :bracket-loc bracket-loc
                                                   :bracket-node bracket-node
                                                   :pos pos
-                                                  :prev-zipper zipper})))))))
+                                                  :loc-root zipper})))))))
 
 (defn require-opts [cm opts]
   (doseq [opt opts] (.setOption cm opt true)))

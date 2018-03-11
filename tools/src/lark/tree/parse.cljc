@@ -98,7 +98,7 @@
 
 (defn printable-only? [n]
   (or
-   (contains-identical-keyword? [:space :comma :newline :comment :comment-block]
+   (contains-identical-keyword? [:space :comma :newline :comment :comment-block :cursor :selection]
                                 (:tag n))
    (get-in n [:options :invalid?])))
 
@@ -257,7 +257,8 @@
                                                     (fn [x]
                                                       (or (nil? x) (#{\newline \return} x))))))
 
-      :cursor (rd/CursorNode! (rd/current-pos reader))
+      :cursor (do (rd/ignore reader)
+                  (rd/CursorNode! (rd/current-pos reader)))
 
       (:deref
        :quote
@@ -309,19 +310,24 @@
   (binding [rd/*invalid-nodes* (volatile! [])
             rd/*cursor* (volatile! nil)]
     (let [reader (indexing-reader s)]
+
       (as-> (rd/->Node :base nil nil nil nil) base
             (rd/conj-children base reader {:read-fn parse-next})
             (rd/assoc-range! base [0 0
                                    (r/get-line-number reader) (r/get-column-number reader)])
-            (let [[source children] (reduce (fn [[source values] node]
-                                              (let [s (emit/string node)]
-                                                [(str source s) (conj values (assoc node :source s))]))
-                                            ["" []] (get base :children))]
-              (assoc base :source source
-                          :children children
-                          :invalid-nodes (util/guard-> @rd/*invalid-nodes*
-                                                       (comp not empty?))
-                          :cursor @rd/*cursor*))))))
+            (let [[source children] (reduce (fn [[source values prev-offset] node]
+                                              (let [s (emit/string prev-offset node)]
+                                                [(str source s)
+                                                 (conj values (assoc node :source s))
+                                                 (count (re-find #"[^\n]$" s))]))
+                                            ["" [] 0] (get base :children))]
+              (assoc base
+                :source source
+                :children children
+
+                :invalid-nodes (util/guard-> @rd/*invalid-nodes*
+                                             (comp not empty?))
+                :cursor @rd/*cursor*))))))
 
 (defn read-one [s]
   (rd/read-with-position (indexing-reader s) parse-next*))
@@ -384,10 +390,11 @@
                           (conj out (rd/->Node :base nil nil nil [node]))))))
                   [])))))
 
-(defn shape [{:keys [tag value] :as node}]
+(defn shape [{:keys [tag children] :as node}]
   (if (= tag :base)
-    (mapv shape value)
+    (mapv shape children)
     (if (n/may-contain-children? node)
-      [tag (mapv shape value)]
+      (into [tag] (mapv shape children))
       tag)))
 
+(shape (group-comment-blocks (ast " ;hi")))

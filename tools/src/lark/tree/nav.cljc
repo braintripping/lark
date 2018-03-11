@@ -13,8 +13,8 @@
 (defn include-prefix-parents [loc]
   (when loc
     (if (contains? prefix-parents (some-> (z/up loc)
-                                               (z/node)
-                                               (get :tag)))
+                                          (z/node)
+                                          (get :tag)))
       (include-prefix-parents (z/up loc))
       loc)))
 
@@ -70,9 +70,7 @@
                      (some-> (filter #(range/within? % pos) (child-locs loc))
                              first
                              (navigate pos))
-                     ;; do we want to avoid 'base'?
-                     loc #_(when-not (= :base (get node :tag))
-                             loc))))]
+                     loc)))]
       (if (let [found-node (some-> found z/node)]
             (and (= (get pos :line) (get found-node :end-line))
                  (= (get pos :column) (get found-node :end-column))))
@@ -110,3 +108,33 @@
     (if (pred loc)
       loc
       (recur pred (z/up loc)))))
+
+(defn path-loc-pred [{:keys [tag]}]
+  (or (= tag :newline)
+      (not (rd/whitespace-tag? tag))))
+
+(defn get-loc [zipper path]
+  (loop [segments path
+         loc zipper]
+    (if (or (not loc)
+            (empty? segments))
+      loc
+      (recur (rest segments)
+             (try
+               (->> (iterate z/right (z/down loc))
+                    (take-while identity)
+                    (filter (comp path-loc-pred z/node))
+                    (drop (first segments))
+                    (first))
+               (catch js/Error e
+                 (prn :WTF (iterate z/right (z/down loc)))))))))
+
+(defn get-path [loc]
+  (loop [loc loc
+         out ()]
+    (if-not loc
+      (drop 1 out)
+      (recur (z/up loc)
+             (cons (->> (z/lefts loc)
+                        (filter path-loc-pred)
+                        (count)) out)))))

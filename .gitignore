@@ -14,4 +14,6 @@ out
 node_modules
 .cpcache
 .shadow-cljs
-tools/public/js
+**/public/js
+**/public/test
+.nrepl-port

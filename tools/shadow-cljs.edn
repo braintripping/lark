@@ -3,7 +3,11 @@
  :builds {:browser {:target :browser
                     :output-dir "public/js"
                     :asset-path "js"
-                    :modules {:cards {:entries [lark.cards.core]}}
+                    :modules {:cards {:entries [lark.cards.core
+                                                lark.tree.parse-test
+                                                lark.structure.edit-tests]}}
                     :devtools {:after-load lark.cards.core/render
-                               :http-root "public"
-                               :http-handler shadow.http.push-state/handle}}}}
+                               :http-root "public/test"
+                               :http-handler shadow.http.push-state/handle}}
+          :test {:target :browser-test
+                 :test-dir "public/test"}}}

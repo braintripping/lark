@@ -11,7 +11,7 @@
   (let [possibly-children? (t/may-contain-children? node)]
     (if possibly-children?
       (let [[l r] (node/edges node)]
-        [:span (get options :prefix) l (map emit-node-with-decoration children) r])
+        [:span l (map emit-node-with-decoration children) r])
       (cond->> (emit/string node)
                invalid? (conj [:span.red])))))
 

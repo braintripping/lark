@@ -14,6 +14,13 @@
 
 (def peek r/peek-char)
 
+(comment
+ (defn reader-offset [indexing-pushback-reader]
+   (.. indexing-pushback-reader
+       -rdr
+       -rdr
+       -s_pos)))
+
 (def edges
   {:deref ["@"]
    :list [\( \)]
@@ -34,7 +41,13 @@
    :var ["#'"]
    :vector [\[ \]]
    :reader-conditional ["#?"]
-   :reader-conditional-splice ["#?@"]})
+   :reader-conditional-splice ["#?@"]
+   :selection [\‹ \›]})
+
+(defn whitespace-tag? [tag]
+  (util/contains-identical-keyword?
+   [:space :newline :comma :cursor :selection]
+   tag))
 
 (defn close-bracket? [ch]
   (util/contains-identical? [\) \] \}] ch))
@@ -215,7 +228,7 @@
   ;; for debugging
   IPrintWithWriter
   (-pr-writer [o writer _]
-    (let [options (cond-> (dissoc options :source :invalid-nodes)
+    (let [options (cond-> (dissoc options :source :invalid-nodes :cursor)
                           range (assoc :range range))]
       (-write writer (str (if (or children (seq options))
                             (cond-> [tag]
@@ -285,22 +298,24 @@
   "Splits after `n` values which pass `pred`.
 
   Returns vector of the form
-  [<taken-values> <remaining-values> <took-n-values?>]"
-  [n pred coll]
+  [<took-n-values?> <taken-values> <remaining-values>]"
+  [n pred stop? coll]
   (loop [remaining coll
-         remaining-n n
+         i 0
          taken []]
-    (cond (= remaining-n 0)
-          [true taken remaining]
+    (cond (= i n)
+          [true taken remaining i]
           (empty? remaining)
-          [false taken remaining]
+          [false taken remaining i]
           :else
-          (let [next-item (nth remaining 0)
-                count-it? (pred next-item)]
-            (recur (subvec remaining 1)
-                   (cond-> remaining-n
-                           count-it? (dec))
-                   (conj taken next-item))))))
+          (let [next-item (nth remaining 0)]
+            (if (and (some? stop?) (stop? next-item))
+              [false taken remaining i]
+              (let [count-it? (pred next-item)]
+                (recur (subvec remaining 1)
+                       (cond-> i
+                               count-it? (inc))
+                       (conj taken next-item))))))))
 
 (defn take-children
   [reader {:keys [:read-fn
@@ -312,6 +327,7 @@
          out []]
     (if (> i 10000)
       (do
+        (prn :take-children out)
         (js/console.error (js/Error. "Infinite loop?"))
         [false out nil])
       (if (and (some? take-n) (= i take-n))
@@ -332,7 +348,7 @@
 
             :splice
             (if take-n
-              (split-after-n take-n count-pred children)
+              (split-after-n take-n count-pred nil children)
               (recur reader next-i (into out children)))
 
             (:eof nil)
@@ -370,7 +386,6 @@
            out []]
       (if (> i 10000)
         (do
-          (prn coll-node out)
           (js/console.error (js/Error. "Infinite loop?"))
           (assoc coll-node :children out))
         (if (and (some? take-n) (= i take-n))
@@ -392,7 +407,7 @@
 
               :splice
               (if take-n
-                (let [[valid? taken-values remaining-values] (split-after-n take-n count-pred children)]
+                (let [[valid? taken-values remaining-values] (split-after-n take-n count-pred nil children)]
                   (if valid?
                     (Splice (assoc coll-node :children taken-values)
                             remaining-values)

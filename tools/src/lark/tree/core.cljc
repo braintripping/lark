@@ -6,7 +6,8 @@
             [lark.tree.nav :as nav]
             [lark.tree.range :as range]
             [lark.tree.reader :as rd]
-            [fast-zip.core :as z]))
+            [fast-zip.core :as z]
+            [lark.tree.format :as format]))
 
 ;; Parse
 
@@ -52,7 +53,7 @@
 ;; Ranges
 
 (def within? range/within?)
-(def inside? range/inside?)
+(def within-inner? range/within-inner?)
 (def edge-ranges range/edge-ranges)
 (def inner-range range/inner-range)
 (def bounds range/bounds)
@@ -61,6 +62,13 @@
 
 (def empty-range? range/empty-range?)
 (def node-highlights range/node-highlights)
+
+(defn format [x]
+  (binding [format/*prettify* true]
+    (-> x
+        (cond->
+         (string? x) (parse/ast))
+        (emit/string))))
 
 (comment
 
@@ -106,98 +114,3 @@
 
 (def shape parse/shape)
 (def group-comment-blocks parse/group-comment-blocks)
-
-(ast "#{")
-
-(binding [emit/*features* #{:cljs}]
-  (for [[in-string out] (->> '[[" "
-                                "\n"
-                                \tab
-                                ",,\t\n"
-                                "#_{}"
-                                "; this is a comment\n"
-                                ";; this is a comment\n"
-                                "; this is a comment"
-                                ";; this is a comment"
-                                ";"
-                                ";;"
-                                ";\n"
-                                ";;\n"] _
-                               "4" 4
-                               "sym" sym
-                               "\"a\"" "a"
-                               "'[" ::emit/INVALID_TOKEN
-                               ["]"
-                                "["
-                                "^"
-                                "#"
-                                "#("
-                                "#{"
-                                "'"
-                                "#{[]"] ::emit/INVALID_TOKEN
-                               "3" 3
-                               "\n" _
-                               "[]" []
-                               "()" ()
-                               "@1" (deref 1)
-                               "#(+)" (fn* [] (+))
-                               "@()" (deref ())
-                               "#{1}" #{1}
-                               "#'wha" (var wha)
-                               "~1" (clojure.core/unquote 1)
-                               ["'1"
-                                "`1"] (quote 1)
-                               "#?(:clj 1 :cljs (+ 2))" [(+ 2)]
-                               "^:yes {}" {}
-                               "^{:no false} {}" {}
-                               "::a/b" :a/b
-                               ";a" _
-                               "#_()" _
-                               "(1)" (1)
-                               "[1]" [1]
-                               ["{1 2}"
-                                "{1    2}"] {1 2}
-
-                               ["@sym"
-                                "@  sym"] (deref sym)
-                               ["'sym"
-                                "' sym"
-                                "`sym"
-                                "`  sym"] (quote sym)
-                               ["~sym"
-                                "~  sym"] (clojure.core/unquote sym)
-                               "~@sym" (clojure.core/unquote-splicing sym)
-
-                               "#'sym" (var sym)
-                               "#'\nsym" (var sym)
-
-                               "^:wha" ::emit/INVALID_TOKEN
-
-                               "#(+ 1 1)" #(+ 1 1)
-
-                               ["#^:wha {}"
-                                "#^{:wha true} {}"] {}
-
-                               ;; regexp's are never equal
-                               #_["#\"[A-B]\"" [#"[A-B]"]]]
-                             (apply hash-map)
-                             (reduce-kv (fn [m s v]
-                                          (if (vector? s)
-                                            (reduce (fn [m s]
-                                                      (assoc m s v)) m s)
-                                            (assoc m s v))) {}))
-        :let [expected-sexp (if (= '_ out) nil out)]]
-    (let [the-ast (ast in-string)
-          the-sexp (-> the-ast
-                       (sexp)
-                       (first))
-          the-str (string the-ast)]
-      (cond (not= the-sexp expected-sexp)
-            [false :incorrect-sexp (sexp the-ast) the-ast :expected expected-sexp]
-            (not= the-str in-string)
-            [false the-str the-ast :expected in-string]
-            :else
-            true))))
-
-
-(ast "#{[]")

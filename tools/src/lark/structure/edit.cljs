@@ -3,6 +3,7 @@
   (:require [lark.tree.core :as tree]
             [lark.tree.range :as range]
             [lark.tree.util :as util]
+            [lark.tree.cursor :as cursor]
             [lark.editors.codemirror :as cm]
             [fast-zip.core :as z]
             [goog.dom :as dom]
@@ -12,7 +13,9 @@
             [lark.tree.parse :as parse]
             [lark.tree.node :as node]
             [clojure.string :as str]
-            [lark.tree.format :as format])
+            [lark.tree.format :as format]
+            [lark.tree.node :as n]
+            [lark.tree.emit :as emit])
   (:require-macros [lark.structure.edit :refer [operation]]))
 
 (def other-bracket {\( \) \[ \] \{ \} \" \"})
@@ -184,7 +187,7 @@
     (let [loc (tree/navigate zipper pos)
           node (z/node loc)
           loc (cond-> loc
-                      (or (not (tree/inside? node pos))
+                      (or (not (tree/within-inner? node pos))
                           (tree/whitespace? node)) (z/up))
           node (z/node loc)
           in-edge? (when (tree/has-edges? node)
@@ -210,7 +213,7 @@
 (defn unwrap! [{{:keys [pos loc bracket-node]} :magic/cursor :as cm}]
   (when (and loc (not (cm/selection? cm)))
     (when-let [closest-edges-loc (loop [loc (cond-> loc
-                                                    (not (tree/inside? bracket-node pos)) (z/up))]
+                                                    (not (tree/within-inner? bracket-node pos)) (z/up))]
                                    (cond (not loc) nil
                                          (tree/has-edges? (z/node loc)) loc
                                          :else (recur (z/up loc))))]
@@ -240,7 +243,7 @@
   (when (and bracket-loc (z/up bracket-loc))
     (let [up (z/node (z/up bracket-loc))]
       (operation cm
-                 (cm/replace-range! cm (tree/string bracket-node) up)
+                 (cm/replace-range! cm (tree/string bracket-loc) up)
                  (cm/set-cursor! cm (tree/bounds up :left)))))
   true)
 
@@ -373,7 +376,7 @@
 (defn slurp-parent? [node pos]
   (and (or #_(= :string (:tag node))
         (tree/may-contain-children? node))
-       (tree/inside? node pos)))
+       (tree/within-inner? node pos)))
 
 (defn slurp-parent [loc pos]
   (loop [loc loc]
@@ -496,3 +499,17 @@
             (z/children)
             (first)
             (node-symbol))))
+
+(defn format! [editor]
+  (binding [lark.tree.format/*prettify* true]
+    (let [{pre-zipper :zipper
+           {pre-pos :pos} :magic/cursor} editor
+          pre-val (.getValue editor)
+          post-val (emit/string pre-zipper)]
+      (let [_ (when (not= pre-val post-val)                 ;; only mutate editor if value has changed
+                (.setValue editor post-val))
+            {post-zipper# :zipper} editor]
+        (->> (cursor/path pre-zipper pre-pos)               ;; cursor position is part of formatting
+             (cursor/position post-zipper#)
+             (cm/range->Pos)
+             (.setCursor editor))))))

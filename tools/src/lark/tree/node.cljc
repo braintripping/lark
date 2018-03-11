@@ -13,8 +13,7 @@
 
 (defn whitespace?
   [node]
-  (contains-identical-keyword? [:space :newline :comma]
-                               (get node :tag)))
+  (rd/whitespace-tag? (get node :tag)))
 
 (defn newline?
   [node]
@@ -54,6 +53,6 @@
   [ast]
   (z/zipper
    may-contain-children?
-   (fn [node] (get node :children))
+   (fn [{:keys [children]}] (when-not (empty? children) children))
    (fn [node children] (assoc node :children children))
    ast))
