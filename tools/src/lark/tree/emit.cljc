@@ -93,9 +93,10 @@
 
              :comma value
              :space (if format/*pretty*
-                      (cond (some-> rd/*active-cursor-node*
-                                    (= node)) value
-                            (format/emit-space? loc) " ")
+                      (cond
+                        (some-> rd/*active-cursor-node*
+                                (= node)) value #_(format/repeat-string " " (min 2 (count value)))               ;;value
+                        (format/emit-space? loc) " ")
                       value)
              :newline (if format/*pretty*
                         (str \newline (format/repeat-string format/INDENT indent))

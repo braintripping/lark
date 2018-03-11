@@ -22,7 +22,8 @@
          [i loc sticky data] (or
 
                               (when cursor-loc
-                                [0 cursor-loc :cursor-space (pos-offset (z/node cursor-loc) pos)])
+                                [0 cursor-loc :cursor-space (-> (pos-offset (z/node cursor-loc) pos)
+                                                                #_(update 1 (partial min 2)))])
 
                               (when-let [inner-range (and (n/has-edges? node)
                                                           (range/inner-range node))]

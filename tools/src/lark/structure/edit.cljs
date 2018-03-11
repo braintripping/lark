@@ -207,26 +207,27 @@
 
 (def kill!
   (fn [{{pos :pos} :magic/cursor
-        zipper :zipper :as cm}]
-    (let [loc (tree/navigate zipper pos)
-          node (z/node loc)
-          loc (cond-> loc
-                      (or (not (tree/within-inner? node pos))
-                          (tree/whitespace? node)) (z/up))
-          node (z/node loc)
-          in-edge? (when (tree/has-edges? node)
-                     (let [inner (tree/inner-range node)]
-                       (not (tree/within? inner pos))))
-          end-node (cond in-edge? nil                       ;; ignore kill when cursor is inside an edge structure, eg. #|""
-                         (not (tree/may-contain-children? node)) (tree/inner-range node)
+        zipper :zipper :as editor}]
+    (edit/with-formatting editor
+      (let [loc (tree/navigate zipper pos)
+            node (z/node loc)
+            loc (cond-> loc
+                        (or (not (tree/within-inner? node pos))
+                            (tree/whitespace? node)) (z/up))
+            node (z/node loc)
+            in-edge? (when (tree/has-edges? node)
+                       (let [inner (tree/inner-range node)]
+                         (not (tree/within? inner pos))))
+            end-node (cond in-edge? nil                     ;; ignore kill when cursor is inside an edge structure, eg. #|""
+                           (not (tree/may-contain-children? node)) (tree/inner-range node)
 
-                         :else (->> (z/children loc)
-                                    (drop-while #(range/lt (range/bounds % :right) pos))
-                                    (take-while #(<= (:line %) (:line pos)))
-                                    (last)))]
-      (when end-node
-        (->> (merge pos (select-keys end-node [:end-line :end-column]))
-             (cut-range! cm))))
+                           :else (->> (z/children loc)
+                                      (drop-while #(range/lt (range/bounds % :right) pos))
+                                      (take-while #(<= (:line %) (:line pos)))
+                                      (last)))]
+        (when end-node
+          (->> (merge pos (select-keys end-node [:end-line :end-column]))
+               (cut-range! editor)))))
     true))
 
 (defn boundary? [s]
@@ -249,14 +250,15 @@
             (cm/replace-range! editor (format/repeat-string " " n) range))))))
   true)
 
-(defn raise! [{{:keys [pos bracket-loc bracket-node]} :magic/cursor :as cm}]
-  ;; TODO
-  ;; highlight bracket node for raise
+(defn raise! [{{:keys [pos bracket-loc bracket-node]} :magic/cursor :as editor}]
   (when (and bracket-loc (z/up bracket-loc))
-    (let [up (z/node (z/up bracket-loc))]
-      (operation cm
-                 (cm/replace-range! cm (tree/string bracket-loc) up)
-                 (cm/set-cursor! cm (tree/bounds up :left)))))
+    (let [outer-node (z/node (z/up bracket-loc))]
+      (edit/with-formatting editor
+        (cm/replace-range! editor "" (merge (range/end->start bracket-node)
+                                            (select-keys outer-node [:end-line :end-column])))
+
+        (cm/replace-range! editor "" (merge (range/bounds outer-node :left)
+                                            (range/start->end bracket-node))))))
   true)
 
 (def copy-form
@@ -311,6 +313,7 @@
       (when (or cursor-root (not selection?))
         (push-cursor! cm)
         (push-stack! cm (cm/current-selection-bounds cm)))
+
       (loop [loc loc]
         (if-not loc
           sel
@@ -431,51 +434,22 @@
 
 (def unslurp-forward
   (fn [{{:keys [loc pos]} :magic/cursor
-        :as cm}]
+        :as editor}]
     (let [end-edge-loc (slurp-parent loc pos)
           end-edge-node (some-> end-edge-loc z/node)]
       (when (and end-edge-node (not= :base (:tag end-edge-node)))
-        (let [children (z/children end-edge-loc)]
-          (when-let [[last-child penultimate-child] (->> children
-                                                         (remove tree/whitespace?)
-                                                         (reverse)
-                                                         (partition 2 2 nil)
-                                                         (first))]
-            (let [end-bracket (second (tree/edges end-edge-node))
-                  replace-start (if penultimate-child
-                                  (-> penultimate-child
-                                      (tree/end->start))
-                                  (-> end-edge-node
-                                      (tree/inner-range)
-                                      (tree/bounds :left)))
-                  replace-end (-> end-edge-node
-                                  (select-keys [:end-line :end-column])
-                                  (range/end->start)
-                                  (cm/range->Pos)
-                                  (->> (pointer cm))
-                                  (move-while 1 #(re-matches #"\s" %))
-                                  (:pos)
-                                  (range/start->end))
-
-                  replace-content (tree/string last-child)
-                  pad-right? (when-let [ch (cm/range-text cm (-> replace-end
-                                                                 (merge (tree/end->start replace-end))
-                                                                 (update :end-column inc)))]
-                               (format/pad-chars?
-                                (last replace-content)
-                                ch))
-                  pad-left? (format/pad-chars? end-bracket (first replace-content))
-                  replacement (str end-bracket
-                                   (when pad-left? " ")
-                                   replace-content
-                                   (when pad-right? " "))]
-              (operation cm
-                         (cm/replace-range! cm
-                                            replacement
-                                            (merge replace-start replace-end))
-                         (cm/set-cursor! cm (min pos
-                                                 (-> replace-start
-                                                     (cm/range->Pos))))))))))
+        (when-let [last-child (->> (z/children end-edge-loc)
+                                   (remove tree/whitespace?)
+                                   (last))]
+          (edit/with-formatting editor
+            (-> (pointer editor (cm/range->Pos (range/end->start end-edge-node)))
+                (insert! (str " " (tree/string last-child) " ")))
+            (cm/replace-range! editor (-> (cm/range-text editor last-child)
+                                          (str/replace #"[^\n]" " ")) last-child)
+            (cm/set-cursor! editor (min pos
+                                        (-> (range/inner-range end-edge-node)
+                                            (range/end->start)
+                                            (cm/range->Pos))))))))
     true))
 
 
