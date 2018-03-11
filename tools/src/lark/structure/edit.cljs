@@ -22,22 +22,25 @@
 (defn format!
   ([editor] (format! editor {}))
   ([editor {:keys [preserve-cursor-space?]}]
-   (binding [lark.tree.format/*pretty* true]
-     (let [pre-val (.getValue editor)
-           pre-zipper (tree/string-zip pre-val)
-           pre-pos (cm/pos->boundary (cm/get-cursor editor))
-           post-val (binding [r/*active-cursor-node*
-                              (when preserve-cursor-space?
-                                (nav/cursor-space-node pre-zipper pre-pos))]
-                      (tree/format pre-zipper))
-           post-zipper (tree/string-zip post-val)]
-       (when (not= pre-val post-val)                        ;; only mutate editor if value has changed
-         (.setValue editor post-val))
-       (cm/set-zipper! editor post-zipper)
-       (->> (cursor/path pre-zipper pre-pos)                ;; cursor path from pre-format zipper, ignoring whitespace
-            (cursor/position post-zipper)                   ;; returns position in post-format zipper for path
-            (cm/range->Pos)
-            (.setCursor editor))))))
+   (let [pre-val (.getValue editor)
+         pre-zipper (tree/string-zip pre-val)
+         pre-pos (cm/pos->boundary (cm/get-cursor editor))
+         cursor-loc (when preserve-cursor-space?
+                      (nav/cursor-space-loc pre-zipper pre-pos))
+         post-val (binding [r/*active-cursor-node* (some-> cursor-loc
+                                                           (z/node))]
+                    (tree/format pre-zipper))
+         post-zipper (tree/string-zip post-val)]
+
+     (when (not= pre-val post-val)                          ;; only mutate editor if value has changed
+       (.setValue editor post-val))
+
+     (->> (cursor/path pre-zipper pre-pos cursor-loc)       ;; cursor path from pre-format zipper, ignoring whitespace
+          (cursor/position post-zipper)                     ;; returns position in post-format zipper for path
+          (cm/range->Pos)
+          (.setCursor editor))
+
+     (cm/set-zipper! editor post-zipper))))
 
 (def other-bracket {\( \) \[ \] \{ \} \" \"})
 (defn spaces [n] (apply str (take n (repeat " "))))
@@ -418,13 +421,12 @@
                                  (or (not (boundary? (first form-content)))
                                      (not (boundary? (last (tree/string last-child))))))
                   cur (.getCursor cm)]
-              (operation cm
-                         (cm/replace-range! cm (str
-                                                (when pad-start " ")
-                                                form-content
-                                                right-bracket)
-                                            (merge replace-start replace-end))
-                         (.setCursor cm cur)))))))
+              (cm/replace-range! cm (str
+                                     (when pad-start " ")
+                                     form-content
+                                     right-bracket)
+                                 (merge replace-start replace-end))
+              (.setCursor cm cur))))))
     true))
 
 (def unslurp-forward

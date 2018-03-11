@@ -257,11 +257,15 @@
     (swap! cm assoc :cursor/handle
            (.setBookmark cm (range->Pos cursor) #js {:widget (cursor-bookmark)})))
 
-(defn set-zipper! [editor zipper]
-  (swap! editor merge {:zipper zipper
-                       :ast (z/node zipper)})
-  (when-let [on-ast (get-in editor [:view :on-ast])]
-    (on-ast zipper)))
+(defn set-zipper!
+  ([editor zipper & [{:keys [decorate?]
+                      :or {decorate? true}}]]
+   (swap! editor merge {:zipper zipper
+                        :ast (z/node zipper)})
+   (when-let [on-ast (get-in editor [:view :on-ast])]
+     (on-ast zipper))
+   (when decorate?
+     (highlight-parse-errors! editor (get (z/node zipper) :invalid-nodes)))))
 
 (defn update-ast!
   [{{:as ast
@@ -276,7 +280,7 @@
                                                         {:errors []}))]
         (highlight-parse-errors! editor invalid-nodes)
         (when (not= next-ast ast)
-          (set-zipper! editor (tree/ast-zip next-ast)))))))
+          (set-zipper! editor (tree/ast-zip next-ast) {:decorate? false}))))))
 
 (defn update-cursor!
   [{:keys [zipper magic/brackets?]

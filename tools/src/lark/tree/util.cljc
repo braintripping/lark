@@ -28,3 +28,8 @@
 
 (defn guard->> [f x]
   (when (f x) x))
+
+#?(:cljs (defn log-current-stack []
+           (try (throw (js/Error.))
+                (catch js/Error e
+                  (js/console.log (.-stack e))))))

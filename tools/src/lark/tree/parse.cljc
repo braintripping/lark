@@ -318,13 +318,14 @@
                                    (r/get-line-number reader) (r/get-column-number reader)
                                    0 (count s)])
             (let [[source children] (reduce (fn [[source values] {:as node
-                                                                              :keys [offset end-offset]}]
+                                                                  :keys [offset end-offset]}]
                                               (let [node-str (subs s offset end-offset)]
                                                 [(str source node-str)
                                                  (conj values (assoc node :source node-str))]))
-                                            ["" []] (get base :children))]
-              (assoc base
-                :source source
-                :children children
-                :invalid-nodes (util/guard-> @rd/*invalid-nodes*
-                                             (comp not empty?))))))))
+                                            ["" []] (get base :children))
+                  base (assoc base
+                         :source source
+                         :children children
+                         :invalid-nodes (util/guard-> @rd/*invalid-nodes*
+                                                      (comp not empty?)))]
+              base)))))

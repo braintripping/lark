@@ -7,6 +7,7 @@
             [lark.tree.reader :as rd]
             [lark.tree.node :as n]
             [lark.tree.nav :as nav]
+            [lark.tree.util :as util]
    #?@(:cljs [[cljs.tools.reader.edn :as edn]
               [cljs.tools.reader :as r]])
    #?@(:clj

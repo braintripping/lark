@@ -109,14 +109,14 @@
       loc
       (recur pred (z/up loc)))))
 
-(defn cursor-space-node [zipper pos]
+(defn cursor-space-loc [zipper pos]
   (when-let [loc (navigate zipper pos)]
     (->> [loc (z/left loc)]
-         (keep #(when (and % (-> %
-                                 (z/node)
-                                 (get :tag)
-                                 (= :space)))
-                  (z/node %)))
+         (keep identity)
+         (filter #(-> %
+                      (z/node)
+                      (get :tag)
+                      (= :space)))
          (first))))
 
 (defn path-node-pred [{:keys [tag]}]

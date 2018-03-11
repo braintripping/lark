@@ -59,8 +59,13 @@
                                       :value (normalize-comment-line (emit/string node)))))
                         :code-block
                         (if (= :base prev-tag)
-                          (update-in out [(dec (count out)) :children] conj node)
-                          (conj out (rd/->Node :base nil nil nil [node]))))))
+                          (update out (dec (count out)) (fn [base]
+                                                          (-> base
+                                                              (update :children conj node)
+                                                              (update :source str (get node :source)))))
+                          (conj out (-> (rd/EmptyNode :base)
+                                        (assoc :children [node]
+                                               :source (get node :source))))))))
                   [])))))
 
 (defn shape [{:keys [tag children] :as node}]

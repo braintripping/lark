@@ -8,7 +8,8 @@
             [lark.tree.reader :as rd]
             [fast-zip.core :as z]
             [lark.tree.format :as format]
-            [lark.tree.ext :as ext]))
+            [lark.tree.ext :as ext]
+            [lark.tree.util :as util]))
 
 ;; Parse
 
