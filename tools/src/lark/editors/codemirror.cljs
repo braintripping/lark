@@ -260,12 +260,13 @@
 (defn set-zipper!
   ([editor zipper & [{:keys [decorate?]
                       :or {decorate? true}}]]
-   (swap! editor merge {:zipper zipper
-                        :ast (z/node zipper)})
-   (when-let [on-ast (get-in editor [:view :on-ast])]
-     (on-ast zipper))
-   (when decorate?
-     (highlight-parse-errors! editor (get (z/node zipper) :invalid-nodes)))))
+   (let [ast (z/node zipper)]
+     (swap! editor merge {:zipper zipper
+                          :ast ast})
+     (when-let [on-ast (get-in editor [:view :on-ast])]
+       (on-ast ast))
+     (when decorate?
+       (highlight-parse-errors! editor (get (z/node zipper) :invalid-nodes))))))
 
 (defn update-ast!
   [{{:as ast
