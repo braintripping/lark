@@ -54,8 +54,10 @@
     (and (= :symbol (get operator :tag))
          (str/ends-with? (name (get operator :value)) "->"))))
 
-(defn node-length [{:keys [column end-column tag]}]
-  (case tag :space 1
+(defn node-length [{:as node :keys [column end-column tag value]}]
+  (case tag :space (if (= node rd/*active-cursor-node*)
+                     (count value)
+                     1)
             :tab 1
             (:cursor :selection) 0
             (- end-column column)))
@@ -84,15 +86,17 @@
            :indent (+ indent-level 1)
            (let [indent-offset (-> indent-type
                                    (cond-> threading? (dec)))
-                 [exact? taken remaining num-passed] (->> (cond->> children
-                                                                   (n/whitespace? (first children)) (drop 1))
-                                                          (rd/split-after-n (+ 2 indent-offset)
-                                                                            (comp (complement whitespace-tag?) :tag)
-                                                                            (fn [node]
-                                                                              (or (= :newline (get node :tag))
-                                                                                  (= node child)))))]
+                 split-after (+ 2 indent-offset)
+                 [exact? taken _ num-passed] (->> (cond->> children
+                                                           (n/whitespace? (first children)) (drop 1))
+                                                  (rd/split-after-n split-after
+                                                                    (comp (complement whitespace-tag?) :tag)
+                                                                    (fn [node]
+                                                                      (or (= :newline (get node :tag))
+                                                                          (= node child)))))]
              (+ indent-level (cond exact? (reduce + 0 (mapv node-length (drop-last taken)))
-                                   (= num-passed 1) 0
+                                   (and (= num-passed 1)
+                                        (not threading?)) 0
                                    :else 1)))))
        (+ indent-level)))))
 

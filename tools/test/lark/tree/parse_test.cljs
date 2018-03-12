@@ -194,7 +194,7 @@
     "(-> {} \n    (assoc :a 1\n           :b 2))"
 
     "(-> {} \n (assoc \n :a 1))"
-    "(-> {} \n    (assoc \n     :a 1))"
+    "(-> {} \n    (assoc \n      :a 1))"
 
     "(assoc {} \n :a 1)"
     "(assoc {} \n  :a 1)"
