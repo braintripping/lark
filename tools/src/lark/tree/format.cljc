@@ -87,8 +87,8 @@
            (let [indent-offset (-> indent-type
                                    (cond-> threading? (dec)))
                  split-after (+ 2 indent-offset)
-                 [exact? taken _ num-passed] (->> (cond->> children
-                                                           (n/whitespace? (first children)) (subvec 1))
+                 [exact? taken _ num-passed] (->> (cond-> children
+                                                          (n/whitespace? (first children)) (subvec 1))
                                                   (rd/split-after-n split-after
                                                                     (comp (complement whitespace-tag?) :tag)
                                                                     (fn [node]
