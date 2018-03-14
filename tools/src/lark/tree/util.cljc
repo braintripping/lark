@@ -1,5 +1,7 @@
 (ns lark.tree.util
-  #?(:cljs (:require-macros [net.cgrand.macrovich :as macros])
+  #?(:cljs (:require-macros
+            [net.cgrand.macrovich :as macros]
+            [lark.tree.util])
      :clj
            (:require [net.cgrand.macrovich :as macros])))
 
