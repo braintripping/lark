@@ -1,4 +1,5 @@
 (ns lark.eval
+  (:refer-clojure :exclude [eval])
   (:require [cljs.js :as cljs]
             [cljs.tools.reader :as r]
             [cljs.tools.reader.reader-types :as rt]

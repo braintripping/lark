@@ -13,16 +13,27 @@
 (defn include-prefix-parents [loc]
   (when loc
     (if (contains? prefix-parents (some-> (z/up loc)
-                                          (z/node)
-                                          (get :tag)))
+                                          (.-node)
+                                          (.-tag)))
       (include-prefix-parents (z/up loc))
       loc)))
 
-(defn iterate-including [f x]
-  (iterate f (f x)))
+(defn iteratev-while [f start-loc]
+  (when start-loc
+    (loop [loc start-loc
+           out [start-loc]]
+      (if-let [next-loc (f loc)]
+        (recur next-loc (conj out next-loc))
+        out))))
 
 (defn child-locs [loc]
-  (take-while identity (iterate z/right (z/down loc))))
+  (iteratev-while z/right (z/down loc)))
+
+(defn right-locs [loc]
+  (iteratev-while z/right (include-prefix-parents (z/right loc))))
+
+(defn left-locs [loc]
+  (iteratev-while z/left (include-prefix-parents (z/left loc))))
 
 (defn right-up [loc]
   (or (z/right loc)
@@ -33,18 +44,6 @@
   (or (z/left loc)
       (some-> (z/up loc)
               (include-prefix-parents))))
-
-(defn right-locs [loc]
-  (->> (z/right loc)
-       (include-prefix-parents)
-       (iterate z/right)
-       (take-while identity)))
-
-(defn left-locs [loc]
-  (->> (z/left loc)
-       (include-prefix-parents)
-       (iterate z/left)
-       (take-while identity)))
 
 (defn before? [pos1 pos2]
   (and (<= (get pos1 :line) (get pos2 :line))
@@ -60,7 +59,8 @@
   (assert pos)
   (if (= (type ast) z/ZipperLocation)
     (let [loc ast
-          {:keys [children] :as node} (z/node loc)
+          node (.-node loc)
+          children (.-children node)
           found (when (range/within? node pos)
                   (if
                    (or (n/terminal-node? node)
@@ -71,7 +71,7 @@
                              first
                              (navigate pos))
                      loc)))]
-      (if (let [found-node (some-> found z/node)]
+      (if (let [found-node (some-> found (.-node))]
             (and (= (get pos :line) (get found-node :end-line))
                  (= (get pos :column) (get found-node :end-column))))
         (or (z/right found) found)
@@ -90,15 +90,15 @@
 (defn mouse-eval-region
   "Select sexp under the mouse. Whitespace defers to parent."
   [loc]
-  (or (and (n/sexp? (z/node loc)) loc)
+  (or (and (n/sexp? (.-node loc)) loc)
       (z/up loc)))
 
 (defn top-loc [loc]
   (loop [loc loc]
     (if-not loc
       loc
-      (if (or (= :base (:tag (z/node loc)))
-              (= :base (some-> (z/up loc) z/node :tag)))
+      (if (or (= :base (:tag (.-node loc)))
+              (= :base (some-> (z/up loc) .-node :tag)))
         loc
         (recur (z/up loc))))))
 
@@ -114,8 +114,8 @@
     (->> [loc (z/left loc)]
          (keep identity)
          (filter #(-> %
-                      (z/node)
-                      (get :tag)
+                      (.-node)
+                      (.-tag)
                       (= :space)))
          (first))))
 

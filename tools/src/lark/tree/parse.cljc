@@ -24,33 +24,6 @@
 #?(:cljs (enable-console-print!))
 
 (declare parse-next)
-(def non-breaking-space \u00A0)
-
-(defn newline?
-  [c]
-  (contains-identical? [\newline
-                        \return]
-                       c))
-
-(defn space?
-  [c]
-  (contains-identical? [\space
-                        \tab
-                        non-breaking-space]
-                       c))
-
-(defn whitespace?
-  [c]
-  (or (contains-identical? [\,
-                            \space
-                            \tab
-                            non-breaking-space]
-                           c)
-      (newline? c)))
-
-(defn boundary? [ch]
-  (contains-identical? [\( \) \[ \] \{ \} \' \" \: \; \@ \^ \` \~ \\ nil]
-                       ch))
 
 (defn read-to-char-boundary
   [reader]
@@ -60,8 +33,8 @@
            ""
            (rd/read-until
             reader
-            #(or (whitespace? %)
-                 (boundary? %)))))))
+            #(or (rd/whitespace? %)
+                 (rd/boundary? %)))))))
 
 (defn dispatch
   [c]
@@ -76,10 +49,10 @@
     (identical? c \,) :comma
 
     (or (identical? c \space)
-        (identical? c non-breaking-space)
+        (identical? c rd/non-breaking-space)
         (identical? c \tab)) :space
 
-    (newline? c) :newline
+    (rd/newline? c) :newline
 
     (identical? c \^) :meta
     (identical? c \#) :sharp
@@ -96,16 +69,16 @@
     :else :token))
 
 (defn printable-only? [n]
-  (or
-   (contains-identical-keyword? [:space :comma :newline :comment :comment-block]
-                                (:tag n))
-   (get-in n [:options :invalid?])))
+  (when n
+    (or
+     (contains-identical-keyword? [:space :comma :newline :comment :comment-block]
+                                  (.-tag n))
+     (get (.-options n) :invalid?))))
 
 (defn take-printable-children
-  [reader node n]
+  [reader tag n]
   (rd/conj-children
-   (cond-> node
-           (keyword? node) (rd/EmptyNode))
+   (rd/EmptyNode tag)
    reader
    {:read-fn parse-next
     :count-pred (complement printable-only?)
@@ -128,7 +101,7 @@
   [rdr initch]
   (loop [sb (StringBuffer.)
          ch (do (r/unread rdr initch) initch)]
-    (if (or (whitespace? ch)
+    (if (or (rd/whitespace? ch)
             (macro-terminating? ch)
             (nil? ch))
       (str sb)
@@ -146,7 +119,12 @@
         expr (try (edn/read-string token)
                   (catch js/Error e
                     ::error))]
-    (if (= expr ::error)
+    (rd/->Node :keyword
+               (when resolve-ns?
+                 {:resolve-ns? resolve-ns?}) nil expr nil)
+    ;; TODO
+    ;; is it important to validate whether this is a valid keyword?
+    #_(if (= expr ::error)
       (rd/InvalidToken! :keyword token)
       (rd/->Node :keyword
                  (when resolve-ns?
@@ -159,9 +137,18 @@
         token (if (identical? ch \\)
                 (str ch (read-to-char-boundary reader))
                 (read-token* reader ch))]
-    (try (let [[tag value] (let [value (edn/read-string token)]
+    (rd/ValueNode :token token)
+    (if (some-> (first token)
+                (js/parseInt)
+                (js/isNaN))
+      (rd/ValueNode :token token)
+      (rd/ValueNode :number token))
+    ;; TODO
+    ;; is it important to detect invalid tokens?
+    #_(try (let [[tag value] (let [value (edn/read-string token)]
                              (if (symbol? value) [:symbol value]
                                                  [:token token]))]
+           (prn [tag value])
            (rd/ValueNode tag value))
          (catch js/Error e
            (rd/report-invalid!
@@ -183,7 +170,7 @@
                                                            :take-n n})]
      (if (and valid? (or (nil? first-printable-child-tag)
                          (-> (first (filter (complement printable-only?) children))
-                             (get :tag)
+                             (.-tag)
                              (= first-printable-child-tag))))
        (-> (rd/EmptyNode tag)
            (assoc :children children)
@@ -218,7 +205,7 @@
     \^ (do (r/read-char reader)
            (take-n-children reader :reader-meta "#^" 2))
     \' (do (r/read-char reader)
-           (take-n-children reader :var "#'" 1 :symbol))
+           (take-n-children reader :var "#'" 1 :token))
     \_ (do (r/read-char reader)
            (take-n-children reader :uneval "#_" 1))
     \? (do
@@ -270,11 +257,11 @@
       :unquote (parse-unquote reader)
 
       :newline (do (rd/ignore reader)
-                   (rd/ValueNode tag (str "\n" (rd/read-while reader space?))))
+                   (rd/ValueNode tag (str "\n" (rd/read-while reader rd/space?))))
 
       :comma (rd/ValueNode tag (rd/read-while reader #(identical? % c)))
 
-      :space (rd/ValueNode tag (rd/read-while reader space?))
+      :space (rd/ValueNode tag (rd/read-while reader rd/space?))
 
       (:list
        :vector
@@ -303,10 +290,6 @@
   (r/indexing-push-back-reader
    (r/string-push-back-reader s 10)))
 
-(defn comment-block-child? [{:keys [tag]}]
-  (contains-identical-keyword? [:space :newline :comment]
-                               tag))
-
 (defn ast
   [s]
   (binding [rd/*invalid-nodes* (volatile! [])]
@@ -315,8 +298,9 @@
       (as-> (rd/->Node :base nil nil nil nil) base
             (rd/conj-children base reader {:read-fn parse-next})
             (rd/assoc-range! base [0 0
-                                   (r/get-line-number reader) (r/get-column-number reader)
-                                   0 (count s)])
+                                   (.-line reader)
+                                   (.-column reader)
+                                   0 (.-length s)])
             (let [[source children] (reduce (fn [[source values] {:as node
                                                                   :keys [offset end-offset]}]
                                               (let [node-str (subs s offset end-offset)]

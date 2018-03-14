@@ -3,12 +3,11 @@
             [lark.tree.core :as tree]
             [fast-zip.core :as z]
             [lark.tree.emit :as emit]
-            [lark.tree.format :as format]
             [cljs.test :refer [deftest is are testing]]
             [lark.tree.reader :as rd]
             [lark.tree.ext :as ext]))
 
-(def shape tree/shape)
+(def shape ext/shape)
 
 (deftest parse
   (binding [lark.tree.emit/*ns* (symbol "lark.tree.parse-test")]
@@ -107,7 +106,7 @@
         (let [ast (parse/ast "(+ 1 2 3)")
               root (tree/ast-zip ast)
               root-string (comp emit/string z/root)
-              cursor {:tag :cursor}
+              cursor (rd/EmptyNode :cursor)
               select-rights (fn [loc n]
                               (let [[contents num] (loop [rights (z/rights loc)
                                                           out [(z/node loc)]
@@ -146,98 +145,21 @@
                          (root-string)) "(‹+ ›1 2 3)"
 
                      #_(-> root
-                         z/down
-                         z/down
-                         (z/insert-left {:tag :selection
-                                         :value []})
-                         z/left
-                         (grow-selection-right)
-                         (grow-selection-right)
-                         (grow-selection-right)
-                         root-string) #_"(‹+ 1› 2 3)"
+                           z/down
+                           z/down
+                           (z/insert-left {:tag :selection
+                                           :value []})
+                           z/left
+                           (grow-selection-right)
+                           (grow-selection-right)
+                           (grow-selection-right)
+                           root-string) #_"(‹+ 1› 2 3)"
 
                      ;;;; next
                      ;; - select by row/col
                      ;; - better selection navigation. eg/ provide
 
                      ))))))
-
-(deftest prettify
-  (are [in out]
-    (= (tree/format in) out)
-
-    "[1\n2]"
-    "[1\n 2]"
-
-    "(+\n1\n2)"
-    "(+\n 1\n 2)"
-
-    "(+        1\n2)"
-    "(+ 1\n   2)"
-
-    "(let [x 2] 3\n4)"
-    "(let [x 2] 3\n           4)"
-
-    "(let [x 2]\n4)"
-    "(let [x 2]\n  4)"
-
-    "[ {:a 1\n:b 2}]"
-    "[{:a 1\n  :b 2}]"
-
-    "(->  a\nb)"
-    "(-> a\n    b)"
-
-    "(->    \n    {})"
-    "(-> \n {})"
-
-    "(-> {} \n (assoc :a 1\n :b 2))"
-    "(-> {} \n    (assoc :a 1\n           :b 2))"
-
-    "(-> {} \n (assoc \n :a 1))"
-    "(-> {} \n    (assoc \n      :a 1))"
-
-    "(assoc {} \n :a 1)"
-    "(assoc {} \n  :a 1)"
-
-    "(assoc {} :a 1\n :b 2)"
-    "(assoc {} :a 1\n          :b 2)"
-
-    "(assoc {}\n :a 1\n :b 2)"
-    "(assoc {}\n  :a 1\n  :b 2)"
-
-    "(+\n  1\n  2)"
-    "(+\n 1\n 2)"
-
-    "(+ 1 \n 2)"
-    "(+ 1 \n   2)"
-
-    "(a b c d e\n )"
-    "(a b c d e\n   )"
-
-    "(a b \n c)"
-    "(a b \n   c)"
-
-    "(1 2 \n 3)"
-    "(1 2 \n 3)"
-
-    "(do 1 2\n 3)"
-    "(do 1 2\n    3)"
-
-    "(let [x 1] 2\n 3)"
-    "(let [x 1] 2\n           3)"
-
-    "(let [x 1]\n 2\n 3)"
-    "(let [x 1]\n  2\n  3)"
-
-    "(let\n [x 1]\n 2\n 3)"
-    "(let\n [x 1]\n 2\n 3)"
-
-    "()[\n]" "()[\n   ]"
-    "[\n]   {\n}" "[\n ] {\n    }"
-
-    "(a\n)"
-    "(a\n )"))
-
 
 (deftest invalid-forms
   (binding [emit/*features* #{:cljs}]
@@ -320,10 +242,12 @@
           :let [expected-sexp (if (= '_ out) nil out)]]
       (let [the-ast (tree/ast in-string)
             the-sexp (-> the-ast
-                         (tree/sexp)
+                         (emit/sexp)
                          (first))
-            the-str (tree/string the-ast)]
+            the-str (emit/string the-ast)]
         (is (= the-sexp expected-sexp)
             "emit/sexp")
         (is (= the-str in-string)
             "emit/string")))))
+
+(parse/ast "#'a")

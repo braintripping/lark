@@ -8,7 +8,7 @@
 
 (defn emit-node-with-decoration [{:keys [tag options children] :as node
                                   {:keys [invalid? error]} :options}]
-  (let [possibly-children? (t/may-contain-children? node)]
+  (let [possibly-children? (node/may-contain-children? node)]
     (if possibly-children?
       (let [[l r] (node/edges node)]
         [:span l (map emit-node-with-decoration children) r])

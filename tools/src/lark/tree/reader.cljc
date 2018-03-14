@@ -47,7 +47,7 @@
 
 (defn whitespace-tag? [tag]
   (util/contains-identical-keyword?
-   [:space :newline :comma :cursor :selection]
+   [:space :newline :tab :comma :cursor :selection]
    tag))
 
 (defn close-bracket? [ch]
@@ -59,8 +59,8 @@
 (defn throw-reader
   "Throw reader exception, including line/column."
   [reader fmt & data]
-  (let [c (r/get-column-number reader)
-        l (r/get-line-number reader)]
+  (let [c (.-column reader)
+        l (.-line reader)]
     (throw
      (#?(:cljs js/Error.
          :clj  Exception.)
@@ -116,8 +116,8 @@
 (defn position
   "Returns 0-indexed vector of [line, column] for current reader position."
   [reader]
-  [(dec (r/get-line-number reader))
-   (dec (r/get-column-number reader))])
+  [(dec (.-line reader))
+   (dec (.-column reader))])
 
 ;; TODO
 ;; :value => (first children)
@@ -131,11 +131,11 @@
 (defprotocol IAppend
   (append [this x]))
 
-(deftype Node [tag
-               options
+(deftype Node [^:mutable tag
+               ^:mutable options
                ^:mutable range
-               value
-               children]
+               ^:mutable value
+               ^:mutable children]
 
   ;; ------------- Add child nodes via `append` --------------
 
@@ -155,20 +155,21 @@
   IEquiv
   (-equiv [o other]
    ;; position not taken into account
-    (and (= tag (get other :tag))
-         (= children (get other :children))
-         (= value (get other :value))
-         (= range (get other :range))
-         (= options (get other :options))))
+    (and (some? other)
+         (= tag (.-tag other))
+         (= children (.-children other))
+         (= value (.-value other))
+         (= range (.-range other))
+         (= options (.-options other))))
 
   ;; ------------- Comparison by range --------------
 
   IComparable
   (-compare [x y]
-    (let [l (- (get x :line) (get y :line))]
+    (let [l (- (-lookup x :line) (-lookup y :line))]
       (if (not= l 0)
         l
-        (- (get x :column) (get y :column)))))
+        (- (-lookup x :column) (-lookup y :column)))))
 
   ;; ------------- Associative operations on `options` --------------
 
@@ -191,6 +192,16 @@
       :range (Node. tag options VAL value children)
       (Node. tag (assoc options k VAL) range value children)))
 
+  ITransientAssociative
+  (-assoc! [this k val]
+    (case k
+      :tag (set! tag val)
+      :value (set! value val)
+      :children (set! children val)
+      :range (set! range val)
+      :options (set! options val))
+    this)
+
   ICollection
   (-conj [coll entry]
     (if (vector? entry)
@@ -203,18 +214,7 @@
 
   ILookup
   (-lookup [this key]
-    (case key :tag tag
-              :value value
-              :children children
-              :range range
-              :line (nth range 0)
-              :column (nth range 1)
-              :end-line (nth range 2)
-              :end-column (nth range 3)
-              :offset (nth range 4)
-              :end-offset (nth range 5)
-              :options options
-              (get options key)))
+    (-lookup this key nil))
   (-lookup [this key not-found]
     (or (case key :tag tag
                   :value value
@@ -227,6 +227,13 @@
                   :offset (nth range 4)
                   :end-offset (nth range 5)
                   :options options
+
+                  ;; todo
+                  ;; see if we should keep this
+                  :start {:line (nth range 0)
+                          :column (nth range 1)}
+                  :end {:line (nth range 2)
+                        :column (nth range 3)}
                   nil)
         (get options key not-found)))
 
@@ -251,14 +258,14 @@
                                                    (inc col)] nil nil)))
 
 (defn current-pos [reader]
-  [(dec (r/get-line-number reader))
-   (dec (r/get-column-number reader))])
+  [(dec (.-line reader))
+   (dec (.-column reader))])
 
 (defn read-with-position
   "Use the given function to read value, then attach row/col metadata."
   [reader read-fn]
-  (let [start-line (dec (r/get-line-number reader))
-        start-column (dec (r/get-column-number reader))
+  (let [start-line (dec (.-line reader))
+        start-column (dec (.-column reader))
         start-offset (current-offset reader)]
     (when-let [node (read-fn reader)]
       (assoc-range!
@@ -266,8 +273,8 @@
        [start-line
         start-column
 
-        (dec (r/get-line-number reader))
-        (dec (r/get-column-number reader))
+        (dec (.-line reader))
+        (dec (.-column reader))
 
         start-offset
         (current-offset reader)]))))
@@ -374,7 +381,7 @@
                      take-n :take-n}]
   (let [[inner-line inner-col] (current-pos reader)
         inner-offset (current-offset reader)
-        coll-tag (get coll-node :tag)
+        coll-tag (.-tag coll-node)
         invalid-exit (fn [out]
                        (case coll-tag
                          :base (assoc coll-node :children out)
@@ -382,27 +389,26 @@
                                        width (count left)]
                                    (report-invalid!
                                     (-> (EmptyNode :unmatched-delimiter)
-                                        (assoc
-                                          :info {:tag coll-tag
-                                                 :direction :forward
-                                                 :expects right}
-                                          :range [inner-line
-                                                  (- inner-col width)
-                                                  inner-line
-                                                  inner-col
-                                                  (- inner-offset width)
-                                                  inner-offset]
-                                          :value left)))) out)))]
+                                        (assoc!
+                                         :options {:info {:tag coll-tag
+                                                          :direction :forward
+                                                          :expects right}}
+                                         :range [inner-line
+                                                 (- inner-col width)
+                                                 inner-line
+                                                 inner-col
+                                                 (- inner-offset width)
+                                                 inner-offset]
+                                         :value left)))) out)))]
     (loop [reader reader
            i 0
            out []]
       (if (> i 10000)
         (do
           (js/console.error (js/Error. "Infinite loop?"))
-          (assoc coll-node :children out))
+          (assoc! coll-node :children out))
         (if (and (some? take-n) (= i take-n))
-          (assoc coll-node :children out)
-
+          (assoc! coll-node :children out)
           (let [{:keys [tag value children] :as next-node} (read-fn reader)
                 next-i (if (and (some? take-n) (some? count-pred))
                          (cond-> i
@@ -421,7 +427,7 @@
               (if take-n
                 (let [[valid? taken-values remaining-values] (split-after-n take-n count-pred nil children)]
                   (if valid?
-                    (Splice (assoc coll-node :children taken-values)
+                    (Splice (assoc! coll-node :children taken-values)
                             remaining-values)
                     (invalid-exit (into out children))))
                 (recur reader next-i (into out children)))
@@ -433,7 +439,7 @@
               (if (and take-n (not= take-n i))
                 (do (unread reader value)
                     (invalid-exit out))
-                (assoc coll-node :children out))
+                (assoc! coll-node :children out))
 
               (recur reader next-i (conj out next-node)))))))))
 
@@ -451,8 +457,8 @@
   (loop [escape? false]
     (if-let [c (r/read-char reader)]
       (cond (and (not escape?) (identical? c \"))
-            (assoc node :value #?(:cljs (.toString buf)
-                                  :clj  (str buf)))
+            (assoc! node :value #?(:cljs (.toString buf)
+                                   :clj  (str buf)))
             :else
             (do
               (.append buf c)
@@ -462,3 +468,39 @@
                    :options {:tag (:tag node)}
                    :value (str \" #?(:cljs (.toString buf)
                                      :clj  (str buf))))))))
+
+(def non-breaking-space \u00A0)
+
+(defn newline?
+  [c]
+  (util/contains-identical? [\newline
+                             \return]
+                            c))
+
+(defn space?
+  [c]
+  (util/contains-identical? [\space
+                             \tab
+                             non-breaking-space]
+                            c))
+
+(defn whitespace?
+  [c]
+  (or (util/contains-identical? [\,
+                                 \space
+                                 \tab
+                                 non-breaking-space]
+                                c)
+      (newline? c)))
+
+(defn brace? [ch]
+  (util/contains-identical? [\( \) \[ \] \{ \} \"]
+                            ch))
+
+(defn prefix? [ch]
+  (util/contains-identical? [\; \: \' \@ \^ \` \~ \\ nil]
+                            ch))
+
+(defn boundary? [ch]
+  (or (brace? ch)
+      (prefix? ch)))

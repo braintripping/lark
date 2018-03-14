@@ -5,9 +5,12 @@
                     :asset-path "js"
                     :modules {:cards {:entries [lark.cards.core
                                                 lark.tree.parse-test
-                                                lark.structure.edit-tests]}}
+                                                lark.tree.cursor-test
+                                                lark.structure.edit-test]}}
                     :devtools {:after-load lark.cards.core/render
-                               :http-root "public/test"
+                               :http-root "public"
                                :http-handler shadow.http.push-state/handle}}
           :test {:target :browser-test
-                 :test-dir "public/test"}}}
+                 :test-dir "public/test"
+                 :devtools {:http-port 8021
+                            :http-root "public/test"}}}}

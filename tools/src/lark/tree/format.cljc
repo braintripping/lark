@@ -6,14 +6,10 @@
             [lark.tree.range :as range]
             [fast-zip.core :as z]))
 
-(def INDENT " ")
+(def SPACES (str/join (take 200 (repeat " "))))
 
-(defn repeat-string [content n]
-  (loop [i 0
-         out ""]
-    (if (= i n)
-      out
-      (recur (inc i) (str out content)))))
+(defn spaces [n]
+  (subs SPACES 0 n))
 
 (def ^:dynamic *pretty* false)
 
@@ -45,14 +41,15 @@
           (re-find #"with|when|if" x) 1
           ;(str/ends-with? x "->") 1
           :else 0)))
+
 (defn threading-node?
   [node]
-  (when-let [operator (and (= (get node :tag) :list)
+  (when-let [operator (and (= (.-tag node) :list)
                            (some-> node
-                                   (get :children)
+                                   (.-children)
                                    (first)))]
-    (and (= :symbol (get operator :tag))
-         (str/ends-with? (name (get operator :value)) "->"))))
+    (and (= :token (.-tag operator))
+         (str/ends-with? (.-value operator) "->"))))
 
 (defn node-length [{:as node :keys [column end-column tag value]}]
   (case tag :space (if (= node rd/*active-cursor-node*)
@@ -66,35 +63,39 @@
   (util/contains-identical-keyword? [:space :cursor :selection :tab :newline]
                                     t))
 
+(defn butlast-vec [v]
+  (cond-> v
+          (not (empty? v)) (pop)))
+
 (defn body-indent*
   ([indent-level node] (body-indent* indent-level node nil))
   ([indent-level loc child]
    (assert (number? indent-level))
-   (let [{:keys [children tag]} (z/node loc)
-         {:as operator
-          op-tag :tag
-          op-value :value} (first children)
+   (let [node (.-node loc)
+         tag (.-tag node)
+         children (.-children node)
+         operator (first children)
          threading? (and (= tag :list)
-                         (some-> loc
-                                 (z/up)
-                                 (z/node)
+                         (some-> (z/up loc)
+                                 (.-node)
                                  (threading-node?)))]
      (if (and (= :list tag)
-              (= :symbol op-tag))
-       (let [indent-type (indentation-for (name op-value))]
+              operator
+              (= :token (.-tag operator)))
+       (let [indent-type (indentation-for (name (.-value operator)))]
          (case indent-type
            :indent (+ indent-level 1)
            (let [indent-offset (-> indent-type
                                    (cond-> threading? (dec)))
                  split-after (+ 2 indent-offset)
                  [exact? taken _ num-passed] (->> (cond-> children
-                                                          (n/whitespace? (first children)) (subvec 1))
+                                                          (n/whitespace? operator) (butlast-vec))
                                                   (rd/split-after-n split-after
-                                                                    (comp (complement whitespace-tag?) :tag)
+                                                                    (complement n/whitespace?)
                                                                     (fn [node]
-                                                                      (or (= :newline (get node :tag))
+                                                                      (or (= :newline (.-tag node))
                                                                           (= node child)))))]
-             (+ indent-level (cond exact? (reduce + 0 (mapv node-length (drop-last taken)))
+             (+ indent-level (cond exact? (reduce + 0 (mapv node-length (pop taken)))
                                    (and (= num-passed 1)
                                         (not threading?)) 0
                                    :else 1)))))
@@ -102,7 +103,7 @@
 
 
 (defn indentation-parent? [node]
-  (util/contains-identical-keyword? [:vector :list :map] (get node :tag)))
+  (util/contains-identical-keyword? [:vector :list :map] (.-tag node)))
 
 (defn body-indent-string [pos child-loc]
   (if-let [coll-loc (->> (iterate z/up child-loc)
@@ -112,14 +113,16 @@
                          (first))]
     (let [coll-node (z/node coll-loc)]
       (let [child (z/node child-loc)
-            left-edge-width (count (first (get rd/edges (get coll-node :tag))))
+            left-edge-width (count (first (get rd/edges (.-tag coll-node))))
             body-indent (+ left-edge-width (body-indent* (:column coll-node) coll-loc child))]
-        (repeat-string INDENT body-indent)))
+        (spaces body-indent)))
     0))
 
 (defn pad-chars?
   "Returns true if space should be left inbetween characters c1 and c2."
   [c1 c2]
-  (cond (rd/close-bracket? c2) false
-        (rd/open-bracket? c1) false
-        :else true))
+  (if (or (rd/close-bracket? c2)
+          (rd/open-bracket? c1)
+          (rd/prefix? c1))
+    false
+    true))

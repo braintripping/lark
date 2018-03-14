@@ -9,7 +9,10 @@
 
    ;; for protocols:
    [lark.editor :as Editor]
-   [clojure.string :as string]))
+   [clojure.string :as string]
+   [lark.tree.range :as range]
+   [lark.tree.node :as node]
+   [lark.tree.nav :as nav]))
 
 (def ^:dynamic *get-ns* (fn [] (symbol "cljs.user")))
 
@@ -63,7 +66,7 @@
   ([pos loc] (sexp-near pos loc nil))
   ([pos loc {:keys [direction ignore?]
              :or {direction :left
-                  ignore? tree/whitespace?}}]
+                  ignore? node/whitespace?}}]
    (let [nav (case direction :left z/left :right z/right)
          the-loc (if-not (ignore? (z/node loc))
                    loc
@@ -72,7 +75,7 @@
                             (not (ignore? (z/node (nav loc)))))
                      (nav loc)
                      loc))]
-     (tree/include-prefix-parents the-loc))))
+     (nav/include-prefix-parents the-loc))))
 
 
 (defn set-temp-marker! [cm]
@@ -176,7 +179,7 @@
 
 (defn temp-select-node! [cm node]
   (set-temp-marker! cm)
-  (select-range cm (tree/bounds node)))
+  (select-range cm (range/bounds node)))
 
 (defn pos->boundary
   ([pos]
@@ -201,18 +204,18 @@
       (pos->boundary cur))))
 
 (defn highlight-range [pos node]
-  (if (and (tree/has-edges? node)
+  (if (and (node/has-edges? node)
            (not= :string (:tag node))
-           (tree/within? (tree/inner-range node) pos))
-    (tree/inner-range node)
+           (range/within? (range/inner-range node) pos))
+    (range/inner-range node)
     node))
 
 (defn select-at-cursor [{{:keys [loc pos]} :magic/cursor :as cm} top-loc?]
   (when-let [cursor-loc (sexp-near pos loc {:direction :left})]
     (let [pos (Pos->range (get-cursor cm))
-          node (if top-loc? (z/node (tree/top-loc cursor-loc))
+          node (if top-loc? (z/node (nav/top-loc cursor-loc))
                             (highlight-range pos (z/node cursor-loc)))]
-      (when (and node (not (tree/whitespace? node)))
+      (when (and node (not (node/whitespace? node)))
         (temp-select-node! cm node)))))
 
 (def mac? (let [platform (.. js/navigator -platform)]
@@ -231,9 +234,9 @@
 
 (defn match-brackets! [cm node]
   (clear-brackets! cm)
-  (when (some-> node (tree/may-contain-children?))
+  (when (some-> node (node/may-contain-children?))
     (swap! cm assoc-in [:magic/cursor :handles]
-           (mark-ranges! cm (tree/node-highlights node) #js {:className "CodeMirror-matchingbracket"}))))
+           (mark-ranges! cm (range/node-highlights node) #js {:className "CodeMirror-matchingbracket"}))))
 
 (defn clear-parse-errors! [cm]
   (doseq [handle (get-in cm [:magic/errors :handles])]
@@ -291,8 +294,8 @@
     (when-let [pos (pos->boundary (get-cursor cm))]
       (when (or (not= pos prev-pos)
                 (not= prev-zipper zipper))
-        (when-let [loc (some-> zipper (tree/navigate pos))]
-          (let [bracket-loc (sexp-near pos loc {:ignore? #(or (tree/whitespace? %)
+        (when-let [loc (some-> zipper (nav/navigate pos))]
+          (let [bracket-loc (sexp-near pos loc {:ignore? #(or (node/whitespace? %)
                                                               (get % :invalid?))})
                 bracket-node (z/node bracket-loc)]
             (when brackets? (match-brackets! cm bracket-node))

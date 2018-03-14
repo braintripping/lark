@@ -15,7 +15,7 @@
   IPrintWithWriter
   (-pr-writer [o writer _]
     (-write writer
-            (prn-str [:L (tree/string (z/node o)) (z/node o)]))))
+            (prn-str [:L (emit/string (z/node o)) (z/node o)]))))
 
 
 (defn prepare-editor [value]
@@ -28,12 +28,12 @@
 (defn path-sexp [loc path]
   (some-> (nav/get-loc loc path)
           (z/node)
-          (tree/sexp)))
+          (emit/sexp)))
 
 (defn sexp-loc [ast value]
   (->> (iterate z/next ast)
        (take-while #(and % (not (z/end? %))))
-       (filter (comp (partial = value) tree/sexp z/node))
+       (filter (comp (partial = value) emit/sexp z/node))
        (first)))
 
 (deftest resolving-paths
@@ -54,7 +54,7 @@
                sexp2 (path-sexp ast2 path)
 
                resolved-loc (when sexp (sexp-loc ast2 sexp))
-               resolved-sexp (when sexp (tree/sexp (z/node resolved-loc)))
+               resolved-sexp (when sexp (emit/sexp (z/node resolved-loc)))
                resolved-path (if sexp
                                (nav/get-path resolved-loc)
                                path)
@@ -101,7 +101,7 @@
                    ;; resolve loc from editor cursor position
                    [path resolved-sticky :as cursor-path] (cursor/path zipper pos)
                    resolved-loc (nav/get-loc zipper path)
-                   resolved-sexp (some-> resolved-loc z/node tree/sexp)
+                   resolved-sexp (some-> resolved-loc z/node emit/sexp)
 
                    ;; format the code and put in a new editor
                    formatted-str (tree/format (.getValue editor))
@@ -112,7 +112,7 @@
                    formatted-resolved-loc (nav/get-loc formatted-zipper path)
                    formatted-resolved-sexp (some-> formatted-resolved-loc
                                                    (z/node)
-                                                   (tree/sexp))
+                                                   (emit/sexp))
 
                    ;; putting cursor back into formatted editor
                    formatted-cursor (try (cursor/position formatted-zipper cursor-path)

@@ -29,7 +29,7 @@
                                                           (range/inner-range node))]
                                 (cond (range/pos= pos inner-range)
                                       [1 loc-at-pos :inner-left]
-                                      (range/pos= pos (range/end->start inner-range))
+                                      (range/pos= pos (range/end inner-range))
                                       [2 loc-at-pos :inner-right]))
                               (when-let [adjacent-loc (->> [loc-at-pos (z/left loc-at-pos) (z/right loc-at-pos)]
                                                            (remove nil?)
@@ -38,7 +38,7 @@
                                 (let [adjacent-node (z/node adjacent-loc)]
                                   (cond (range/pos= pos adjacent-node)
                                         [3 adjacent-loc :outer-left]
-                                        (range/pos= pos (range/end->start adjacent-node))
+                                        (range/pos= pos (range/end adjacent-node))
                                         [4 adjacent-loc :outer-right])))
                               (when (some-> (z/up loc-at-pos)
                                             (z/node)
@@ -56,7 +56,7 @@
                               (when (some-> (z/left loc-at-pos)
                                             (z/node)
                                             (util/guard-> nav/path-node-pred)
-                                            (range/end->start)
+                                            (range/end)
                                             (= pos))
                                 [8 (z/left loc-at-pos) :outer-right])
 

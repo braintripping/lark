@@ -55,9 +55,10 @@
      :end-column (- end-column (count right))}
     node))
 
-(defn start->end [{:keys [line column]}]
+(defn ->end [{:keys [line column]}]
   {:end-line line :end-column column})
-(defn end->start [{:keys [end-line end-column]}]
+
+(defn end [{:keys [end-line end-column]}]
   {:line end-line :column end-column})
 
 (defn bounds
