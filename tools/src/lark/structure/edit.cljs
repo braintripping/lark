@@ -466,10 +466,10 @@
                                                      :right (- (count line) padding)))))
   true)
 
-(defn node-symbol [{:as node
-                    :keys [tag]}]
-  (when (= :symbol tag)
-    (emit/sexp node)))
+(defn node-symbol [node]
+  (when (= :token (.-tag node))
+    (-> (emit/sexp node)
+        (util/guard-> symbol?))))
 
 (defn eldoc-symbol
   ([loc pos]
@@ -478,7 +478,7 @@
                             (some-> loc (z/node) (range/bounds :left))) (z/up))))
   ([loc]
    (some->> loc
-            (nav/closest #(#{:list :fn} (:tag (z/node %))))
+            (nav/closest #(#{:list :fn} (.-tag (z/node %))))
             (z/children)
             (first)
             (node-symbol))))
