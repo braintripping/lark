@@ -91,7 +91,7 @@
                  [exact? taken _ num-passed] (->> (cond-> children
                                                           (n/whitespace? operator) (butlast-vec))
                                                   (rd/split-after-n split-after
-                                                                    (complement n/whitespace?)
+                                                                    n/sexp?
                                                                     (fn [node]
                                                                       (or (= :newline (.-tag node))
                                                                           (= node child)))))]
