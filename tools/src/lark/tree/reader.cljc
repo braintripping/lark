@@ -497,10 +497,10 @@
   (util/contains-identical? [\( \) \[ \] \{ \} \"]
                             ch))
 
-(defn prefix? [ch]
+(defn prefix-boundary? [ch]
   (util/contains-identical? [\; \: \' \@ \^ \` \~ \\ nil]
                             ch))
 
 (defn boundary? [ch]
   (or (brace? ch)
-      (prefix? ch)))
+      (prefix-boundary? ch)))

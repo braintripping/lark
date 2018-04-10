@@ -123,6 +123,7 @@
   [c1 c2]
   (if (or (rd/close-bracket? c2)
           (rd/open-bracket? c1)
-          (rd/prefix? c1))
+          (rd/prefix-boundary? c1)
+          (= \# c1))
     false
     true))
