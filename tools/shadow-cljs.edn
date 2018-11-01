@@ -9,6 +9,7 @@
                                                 lark.structure.edit-test]}}
                     :devtools {:after-load lark.cards.core/render
                                :http-root "public"
+                               :http-port 8041
                                :http-handler shadow.http.push-state/handle}}
           :test {:target :browser-test
                  :test-dir "public/test"

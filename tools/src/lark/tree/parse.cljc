@@ -4,26 +4,23 @@
 (ns lark.tree.parse
   (:require [lark.tree.reader :as rd]
             [lark.tree.emit :as emit]
-            [lark.tree.node :as n]
-            [clojure.string :as string]
             [cljs.tools.reader.impl.commons :refer [parse-symbol]]
             [lark.tree.util :as util]
-
-   #?@(:cljs
-       [[cljs.tools.reader.reader-types :as r]
-        [cljs.tools.reader.edn :as edn]])
-   #?@(:clj
-       [
-            [clojure.tools.reader.reader-types :as r]
-            [clojure.tools.reader.edn :as edn]
-            [lark.tree.util :as util :refer [contains-identical-keyword?]]])
-            [clojure.string :as str])
-  #?(:cljs (:require-macros [lark.tree.util :as util :refer [contains-identical-keyword? contains-identical?]]))
-  (:import goog.string.StringBuffer))
+            [lark.tree.util :as util]
+            #?@(:cljs
+                [[cljs.tools.reader.reader-types :as r]
+                 [cljs.tools.reader.edn :as edn]])
+            #?@(:clj
+                [[clojure.tools.reader.reader-types :as r]
+                 [clojure.tools.reader.edn :as edn]])))
 
 #?(:cljs (enable-console-print!))
 
 (declare parse-next)
+
+(defn boundary? [x]
+  (or (rd/whitespace? x)
+      (rd/boundary? x)))
 
 (defn read-to-char-boundary
   [reader]
@@ -31,48 +28,42 @@
     (str c
          (if (identical? c \\)
            ""
-           (rd/read-until
-            reader
-            #(or (rd/whitespace? %)
-                 (rd/boundary? %)))))))
+           (rd/read-until reader boundary?)))))
 
 (defn dispatch
   [c]
   (cond
-    (nil? c) :eof
-    (identical? c (first rd/*delimiter*)) :matched-delimiter
-    (contains-identical? [\}
-                          \]
-                          \)] c) :unmatched-delimiter
-
-
-    (identical? c \,) :comma
-
     (or (identical? c \space)
         (identical? c rd/non-breaking-space)
         (identical? c \tab)) :space
 
-    (rd/newline? c) :newline
-
-    (identical? c \^) :meta
-    (identical? c \#) :sharp
+    (identical? c (first rd/*delimiter*)) :matched-delimiter
     (identical? c \() :list
+    (rd/newline? c) :newline
     (identical? c \[) :vector
-    (identical? c \{) :map
-    (identical? c \~) :unquote
-    (identical? c \') :quote
-    (identical? c \`) :syntax-quote
-    (identical? c \;) :comment
-    (identical? c \@) :deref
     (identical? c \") :string
+    (identical? c \^) :meta
     (identical? c \:) :keyword
+    (identical? c \;) :comment
+    (identical? c \{) :map
+    (identical? c \#) :sharp
+    (nil? c) :eof
+    (identical? c \@) :deref
+    (identical? c \,) :comma
+
+    (util/contains-identical? [\}
+                               \]
+                               \)] c) :unmatched-delimiter
+    (identical? c \') :quote
+    (identical? c \~) :unquote
+    (identical? c \`) :syntax-quote
     :else :token))
 
 (defn printable-only? [n]
   (when n
     (or
-     (contains-identical-keyword? [:space :comma :newline :comment :comment-block]
-                                  (.-tag n))
+     (util/contains-identical-keyword? [:space :comma :newline :comment :comment-block]
+                                       (.-tag n))
      (get (.-options n) :invalid?))))
 
 (defn take-printable-children
@@ -86,26 +77,28 @@
 
 ;; -------------- from cljs.tools.reader.edn ------------------
 
-(defn- macro-char? [ch]
-  (case ch
-    (\" \: \; \^ \( \) \[ \] \{ \} \\ \#) true
-    nil))
-
 (defn- macro-terminating? [ch]
-  (and (not (identical? \# ch))
-       (not (identical? \' ch))
-       (not (identical? \: ch))
-       (macro-char? ch)))
+  (util/contains-identical? [")"
+                             "]"
+                             "}"
+                             "{"
+                             "\""
+                             "["
 
-(defn ^String read-token*
-  [rdr initch]
-  (loop [sb (StringBuffer.)
+                             ;; the chars below are never found?
+
+                             "^"
+                             "("
+                             "\\"] ch))
+
+(defn read-token* ^string [rdr initch]
+  (loop [out ""
          ch (do (r/unread rdr initch) initch)]
-    (if (or (rd/whitespace? ch)
-            (macro-terminating? ch)
-            (nil? ch))
-      (str sb)
-      (recur (doto sb (.append (r/read-char rdr))) (r/peek-char rdr)))))
+    (cond (rd/whitespace? ch) out
+          (macro-terminating? ch) out
+          (nil? ch) out
+          :else
+          (recur (str out (r/read-char rdr)) (r/peek-char rdr)))))
 
 ;; -------------------------------------------------------------
 
@@ -118,14 +111,15 @@
         token (read-token* reader ch)
         expr (try (edn/read-string token)
                   (catch js/Error e
-                    ::error))]
-    (rd/->Node :keyword
-               (when resolve-ns?
-                 {:resolve-ns? resolve-ns?}) nil expr nil)
+                    ::error))
+        full-token (cond->> token
+                            resolve-ns? (str ":"))]
+    #_(prn full-token expr)
     ;; TODO
     ;; is it important to validate whether this is a valid keyword?
-    #_(if (= expr ::error)
-      (rd/InvalidToken! :keyword token)
+    (if (= expr ::error)
+      (rd/InvalidToken! :keyword (cond->> token
+                                          resolve-ns? (str ":")))
       (rd/->Node :keyword
                  (when resolve-ns?
                    {:resolve-ns? resolve-ns?}) nil expr nil))))
@@ -138,7 +132,8 @@
                 (str ch (read-to-char-boundary reader))
                 (read-token* reader ch))]
     (rd/ValueNode :token token)
-    (if (some-> (first token)
+    (if (some-> token
+                (subs 0 1)
                 (js/parseInt)
                 (js/isNaN))
       (rd/ValueNode :token token)
@@ -146,19 +141,19 @@
     ;; TODO
     ;; is it important to detect invalid tokens?
     #_(try (let [[tag value] (let [value (edn/read-string token)]
-                             (if (symbol? value) [:symbol value]
-                                                 [:token token]))]
-           (prn [tag value])
-           (rd/ValueNode tag value))
-         (catch js/Error e
-           (rd/report-invalid!
-            (rd/->Node :token
-                       {:info {:tag (or (some-> (re-find #"symbol|number" (ex-message e))
-                                                (keyword))
-                                        :token)}}
-                       nil
-                       token
-                       nil))))))
+                               (if (symbol? value) [:symbol value]
+                                                   [:token token]))]
+             (prn [tag value])
+             (rd/ValueNode tag value))
+           (catch js/Error e
+             (rd/report-invalid!
+              (rd/->Node :token
+                         {:info {:tag (or (some-> (re-find #"symbol|number" (ex-message e))
+                                                  (keyword))
+                                          :token)}}
+                         nil
+                         token
+                         nil))))))
 
 (defn take-n-children
   ([reader tag prefix n] (take-n-children reader tag prefix n nil))
@@ -294,7 +289,6 @@
   [s]
   (binding [rd/*invalid-nodes* (volatile! [])]
     (let [reader (indexing-reader s)]
-
       (as-> (rd/->Node :base nil nil nil nil) base
             (rd/conj-children base reader {:read-fn parse-next})
             (rd/assoc-range! base [0 0

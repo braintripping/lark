@@ -1,7 +1,7 @@
 (ns lark.cards.parse
   (:require [lark.tree.core :as t]
             [lark.cards.editor :as editor :refer [CodeView]]
-            [re-view.core :as v]
+            [chia.view :as v]
             [lark.tree.emit :as emit]
             [lark.tree.node :as node]
             [lark.tree.parse :as parse]))
@@ -30,8 +30,8 @@
           (conj \])))))
 
 (v/defview show-parse
-  {:key (comp first :view/children)
-   :view/initial-state (fn [_ s] {:value s})}
+  {:key (comp first :view/children identity)
+   :view/initial-state (fn [_ _ s] {:value s})}
   [{:keys [view/state]}]
   (let [value (:value @state)
         {:as node
@@ -43,14 +43,14 @@
       (CodeView {:value value
                  :error-ranges invalid-nodes
                  :on-update #(swap! state assoc :value %)})]
-     (into [:.pa2 {:style {:width "25%"}}]
-           (map emit-node-with-decoration children))
-     (into [:.pa2 {:style {:width "25%"}}
-            (when-not (boolean (= emitted value))
-              [:div
-               [:div.red str "(not= emitted input) \nemitted: \n" (prn-str emitted) "\nvalue: \n" (prn-str value)]
-               (str "\n" emitted "\n")])]
-           (interpose " " (map emit-node-structure children)))]))
+     [:.pa2 {:style {:width "25%"}}
+      (map emit-node-with-decoration children)]
+     [:.pa2 {:style {:width "25%"}}
+      (when-not (boolean (= emitted value))
+        [:div
+         [:div.red "(not= emitted input) \nemitted: \n" (prn-str emitted) "\nvalue: \n" (prn-str value)]
+         (str "\n" emitted "\n")])
+      (interpose " " (map emit-node-structure children))]]))
 
 (v/defview cards []
   [:div.pa3
@@ -73,6 +73,10 @@
          ":normal-kw"
          "::lookup-kw"
          ":invalid-kw/"
+         ":"
+         "::"
+         "::/"
+         "::a/"
          "symbol"
          "invalid-sym/"
          "["
@@ -109,4 +113,4 @@
          "#?(:cljs 1 :cljs 2)"
          "#?(:clj 1 :cljs 2)"
          "#?(:clj 1)"]
-        (map show-parse))])
+        (map-indexed show-parse))])

@@ -17,3 +17,4 @@ node_modules
 **/public/js
 **/public/test
 .nrepl-port
+.DS_Store

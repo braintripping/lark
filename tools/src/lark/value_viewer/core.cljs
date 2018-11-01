@@ -1,8 +1,7 @@
 (ns lark.value-viewer.core
   (:require [goog.object :as gobj]
-            [re-view.util :as v-util]
-            [re-view.core :as v :refer [defview]]
-            [re-view.hiccup.core :as hiccup])
+            [chia.view :as v]
+            [chia.view.hiccup :as hiccup])
   (:import [goog.async Deferred]))
 
 (def space \u00A0)
@@ -55,7 +54,7 @@
 
 (declare format-value)
 
-(defview display-deferred
+(v/defview display-deferred
   {:view/will-mount (fn [{:keys [deferred view/state]}]
                       (-> deferred
                           (.addCallback #(swap! state assoc :value %1))
@@ -86,7 +85,25 @@
     [:.dib {:class    class
             :on-click #(swap! state assoc :collection-expanded? (not is-expanded?))} label]))
 
-(defview format-collection
+(defn update-attrs [el f & args]
+  (if-not (vector? el)
+    el
+    (let [attrs? (map? (second el))]
+      (into [(el 0) (apply f (if attrs? (el 1) {}) args)]
+            (subvec el (if attrs? 2 1))))))
+
+(defn ensure-keys [forms]
+  (let [seen #{}]
+    (map-indexed #(update-attrs %2 update :key (fn [k]
+                                                 (if (or (nil? k) (contains? seen k))
+                                                   %1
+                                                   (do (swap! seen conj k)
+                                                       k)))) forms)))
+
+(defn map-with-keys [& args]
+  (ensure-keys (apply clojure.core/map args)))
+
+(v/defview format-collection
   {:view/initial-state {:limit-n              20
                         :collection-expanded? nil}}
   [{state :view/state :as this} depth value]
@@ -100,14 +117,14 @@
                                   {:class hover-class}
                                   [:.flex.items-start.nowrap (if (empty? value) (str space lb)
                                                                                 (toggle-depth this depth (str space lb space)))]
-                                  [:div.v-top (interpose " " (v-util/map-with-keys (partial format-value (inc depth)) (take limit-n value)))]
+                                  [:div.v-top (interpose " " (map-with-keys (partial format-value (inc depth)) (take limit-n value)))]
                                   (when more? [:.flex.items-end [expander-outter {:class    "pointer"
                                                                                   :on-click #(swap! state update :limit-n + 20)} "…"]])
                                   [:.flex.items-end.nowrap (str space rb space)]]
           :else [:.inline-flex.items-center.gray.nowrap
                  {:class hover-class} (toggle-depth this depth (str space lb "…" rb space))])))
 
-(defview format-map
+(v/defview format-map
   {:view/initial-state {:limit-n              20
                         :collection-expanded? nil}}
   [{state :view/state :as this} depth value]
@@ -137,7 +154,7 @@
       [:.inline-flex.items-center.gray
        {:class hover-class} (toggle-depth this depth (str space lb "…" rb space))])))
 
-(defview format-function
+(v/defview format-function
   {:view/initial-state (fn [_ value] {:expanded? false})}
   [{:keys [view/state]} value]
   (let [{:keys [expanded?]} @state

@@ -1,5 +1,5 @@
 (ns lark.editor
-  (:require [re-view.core :as v]))
+  (:require [chia.view :as v]))
 
 (def view-index (volatile! {}))
 
@@ -14,11 +14,14 @@
 (defn unmount [view]
   (vswap! view-index dissoc (:id (:block view))))
 
+(defprotocol IEditor
+  (get-editor [this]))
+
 (defn of-block [block]
   (when-not (view block)
     (v/flush!))
   (some-> (view block)
-          (.getEditor)))
+          (get-editor)))
 
 (defprotocol IKind
   (kind [this]))

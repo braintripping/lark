@@ -5,7 +5,8 @@
             [lark.tree.emit :as emit]
             [cljs.test :refer [deftest is are testing]]
             [lark.tree.reader :as rd]
-            [lark.tree.ext :as ext]))
+            [lark.tree.ext :as ext]
+            [chia.util.js-interop :as j]))
 
 (def shape ext/shape)
 
@@ -47,8 +48,6 @@
         "#?(:clj 1 :cljs 2)" '[2]
         "#?(:clj 1)" '[]
         "my:symbol" '[my:symbol])
-
-
 
       (let [regexp-string "#\"[a-z]\""
             tree (parse/ast "#\"[a-z]\"")]
@@ -250,4 +249,4 @@
         (is (= the-str in-string)
             "emit/string")))))
 
-(parse/ast "#'a")
+

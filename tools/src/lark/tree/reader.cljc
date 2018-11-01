@@ -3,8 +3,7 @@
   (:require
    [lark.tree.util :as util]
    #?(:cljs [cljs.tools.reader.reader-types :as r]
-      :clj
-   [clojure.tools.reader.reader-types :as r]))
+      :clj  [clojure.tools.reader.reader-types :as r]))
   #?(:cljs (:import [goog.string StringBuffer])))
 
 (def ^:dynamic *invalid-nodes* nil)
@@ -156,7 +155,7 @@
   (-equiv [o other]
    ;; position not taken into account
     (and (some? other)
-         (= tag (.-tag other))
+         (keyword-identical? tag (.-tag other))
          (= children (.-children other))
          (= value (.-value other))
          (= range (.-range other))
@@ -216,26 +215,25 @@
   (-lookup [this key]
     (-lookup this key nil))
   (-lookup [this key not-found]
-    (or (case key :tag tag
-                  :value value
-                  :children children
-                  :range range
-                  :line (nth range 0)
-                  :column (nth range 1)
-                  :end-line (nth range 2)
-                  :end-column (nth range 3)
-                  :offset (nth range 4)
-                  :end-offset (nth range 5)
-                  :options options
+    (case key :tag tag
+              :value value
+              :children children
+              :range range
+              :line (nth range 0)
+              :column (nth range 1)
+              :end-line (nth range 2)
+              :end-column (nth range 3)
+              :offset (nth range 4)
+              :end-offset (nth range 5)
+              :options options
 
-                  ;; todo
-                  ;; see if we should keep this
-                  :start {:line (nth range 0)
-                          :column (nth range 1)}
-                  :end {:line (nth range 2)
-                        :column (nth range 3)}
-                  nil)
-        (get options key not-found)))
+              ;; todo
+              ;; see if we should keep this
+              :start {:line (nth range 0)
+                      :column (nth range 1)}
+              :end {:line (nth range 2)
+                    :column (nth range 3)}
+              (get options key not-found)))
 
   ;; for debugging
   IPrintWithWriter
@@ -316,10 +314,8 @@
   (loop [remaining coll
          i 0
          taken []]
-    (cond (= i n)
-          [true taken remaining i]
-          (empty? remaining)
-          [false taken remaining i]
+    (cond (identical? i n) [true taken remaining i]
+          (empty? remaining) [false taken remaining i]
           :else
           (let [next-item (nth remaining 0)]
             (if (and (some? stop?) (stop? next-item))
@@ -343,7 +339,7 @@
         (prn :take-children out)
         (js/console.error (js/Error. "Infinite loop?"))
         [false out nil])
-      (if (and (some? take-n) (= i take-n))
+      (if (and (some? take-n) (identical? i take-n))
         [true out nil]
         (let [{:keys [tag value children] :as next-node} (read-fn reader)
               next-i (if (and (some? take-n) (some? count-pred))
@@ -368,7 +364,7 @@
             [false out nil]
 
             :matched-delimiter
-            (if (and take-n (not= take-n i))
+            (if (and take-n (not (identical? take-n i)))
               (do (unread reader value)
                   [false out nil])
               [true out nil])
@@ -407,7 +403,7 @@
         (do
           (js/console.error (js/Error. "Infinite loop?"))
           (assoc! coll-node :children out))
-        (if (and (some? take-n) (= i take-n))
+        (if (and (some? take-n) (identical? i take-n))
           (assoc! coll-node :children out)
           (let [{:keys [tag value children] :as next-node} (read-fn reader)
                 next-i (if (and (some? take-n) (some? count-pred))

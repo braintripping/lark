@@ -1,5 +1,5 @@
 (ns lark.cards.core
-  (:require [re-view.core :as v]
+  (:require [chia.view :as v]
             [lark.cards.parse :as parse]))
 
 (defn render []
