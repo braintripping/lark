@@ -51,7 +51,7 @@
          (str/ends-with? (.-value operator) "->"))))
 
 (defn node-length [{:as node :keys [column end-column]}]
-  (case (.-tag node) :space (if (= node rd/*active-cursor-node*)
+  (case (.-tag node) :space (if (identical? node rd/*active-cursor-node*)
                               (count (.-value node))
                               1)
                      :tab 1
@@ -94,7 +94,7 @@
                                                                         n/sexp?
                                                                         (fn [node]
                                                                           (or (perf/identical? :newline (.-tag node))
-                                                                              (= node child)))))]
+                                                                              (identical? node child)))))]
                  (+ indent-level (cond exact? (reduce + 0 (mapv node-length (pop taken)))
                                        (and (identical? num-passed 1)
                                             (not threading?)) 0

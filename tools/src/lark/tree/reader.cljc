@@ -224,7 +224,7 @@
                     :column (nth range 3)}
               nil))
   (-lookup [this key not-found]
-   (or (-lookup this key) not-found))
+    (or (-lookup this key) not-found))
 
   ;; for debugging
   IPrintWithWriter
@@ -302,19 +302,20 @@
   Returns vector of the form
   [<took-n-values?> <taken-values> <remaining-values>]"
   [n pred stop? coll]
-  (loop [remaining coll
-         i 0
-         taken []]
-    (cond (identical? i n) [true taken remaining i]
-          (empty? remaining) [false taken remaining i]
-          :else
-          (let [next-item (nth remaining 0)]
-            (if (and (some? stop?) (stop? next-item))
-              [false taken remaining i]
-              (let [count-it? (pred next-item)]
-                (recur (subvec remaining 1)
-                       (cond-> i
-                               count-it? (inc))
+  (let [end (count coll)]
+    (loop [i 0
+           counted 0
+           taken []]
+      (cond (identical? counted n) [true taken (subvec coll i) counted]
+            (identical? i end) [false taken [] counted]
+            :else
+            (let [next-item (nth coll i)]
+              (if (and (some? stop?)
+                       (stop? next-item))
+                [false taken (subvec coll i) counted]
+                (recur (inc i)
+                       (cond-> counted
+                               (pred next-item) (inc))
                        (conj taken next-item))))))))
 
 (defn take-children
@@ -322,15 +323,15 @@
                   :count-pred]
            take-n :take-n}]
   ;; returns `child-values, remaining-values, valid?`
-  (loop [reader reader
-         i 0
+  (loop [i 0
          out []]
     (if (> i 10000)
       (do
         (prn :take-children out)
         (js/console.error (js/Error. "Infinite loop?"))
         [false out nil])
-      (if (and (some? take-n) (identical? i take-n))
+      (if (and (some? take-n)
+               (identical? i take-n))
         [true out nil]
         (let [next-node (read-fn reader)]
           (if (nil? next-node)
@@ -349,12 +350,12 @@
                   (do
                     (unread reader value)
                     [false out nil])
-                  (recur reader next-i (conj out (report-invalid! next-node))))
+                  (recur next-i (conj out (report-invalid! next-node))))
 
                 :splice
                 (if take-n
                   (split-after-n take-n count-pred nil children)
-                  (recur reader next-i (into out children)))
+                  (recur next-i (into out children)))
 
                 :eof
                 [false out nil]
@@ -365,90 +366,86 @@
                       [false out nil])
                   [true out nil])
 
-                (recur reader next-i (conj out next-node))))))))))
+                (recur next-i (conj out next-node))))))))))
+
+(defn- invalid-exit [coll-node reader out]
+  (let [coll-tag (.-tag coll-node)
+        [inner-line inner-col] (current-pos reader)
+        inner-offset (current-offset reader)]
+    (case coll-tag
+      :base (assoc coll-node :children out)
+      (Splice (let [[left right] (edges coll-tag)
+                    width (count left)]
+                (report-invalid!
+                 (doto (EmptyNode :unmatched-delimiter)
+                   (-> .-options
+                       (set! {:info {:tag coll-tag
+                                     :direction :forward
+                                     :expects right}}))
+                   (-> .-range
+                       (set! [inner-line
+                              (- inner-col width)
+                              inner-line
+                              inner-col
+                              (- inner-offset width)
+                              inner-offset]))
+                   (-> .-value
+                       (set! left))))) out))))
+
+(defn- valid-exit [coll-node out]
+  (set! (.-children coll-node) out)
+  coll-node)
 
 (defn conj-children
   [coll-node reader {:keys [:read-fn
                             :count-pred]
                      take-n :take-n}]
-  (let [[inner-line inner-col] (current-pos reader)
-        inner-offset (current-offset reader)
-        coll-tag (.-tag coll-node)
-        invalid-exit (fn [out]
-                       (case coll-tag
-                         :base (assoc coll-node :children out)
-                         (Splice (let [[left right] (edges coll-tag)
-                                       width (count left)]
-                                   (report-invalid!
-                                    (doto (EmptyNode :unmatched-delimiter)
-                                      (-> .-options
-                                          (set! {:info {:tag coll-tag
-                                                        :direction :forward
-                                                        :expects right}}))
-                                      (-> .-range
-                                          (set! [inner-line
-                                                 (- inner-col width)
-                                                 inner-line
-                                                 inner-col
-                                                 (- inner-offset width)
-                                                 inner-offset]))
-                                      (-> .-value
-                                          (set! left))))) out)))]
-    (loop [reader reader
-           i 0
-           out []]
-      (if (> i 10000)
-        (do
-          (js/console.error (js/Error. "Infinite loop?"))
-          (doto coll-node
-            (-> .-children
-                (set! out))))
-        (if (and (some? take-n) (identical? i take-n))
-          (doto coll-node
-            (-> .-children
-                (set! out)))
-          (let [next-node (read-fn reader)]
-            (if (nil? next-node)
-              (invalid-exit out)
-              (let [tag (.-tag next-node)
-                    value (.-value next-node)
-                    children (.-children next-node)
-                    next-i (if (and (some? take-n) (some? count-pred))
-                             (cond-> i
-                                     (count-pred next-node) (inc))
-                             (inc i))]
-                (case tag
-                  :unmatched-delimiter
-                  (if
-                   (contains? (set *delimiter*) value)      ;; can match prev
-                    (do
-                      (unread reader value)
-                      (invalid-exit out))
-                    (recur reader next-i (conj out (report-invalid! next-node))))
+  (loop [i 0
+         out []]
+    (if (> i 10000)
+      (do
+        (js/console.error (js/Error. "Infinite loop?"))
+        (valid-exit coll-node out))
+      (if (and (some? take-n) (identical? i take-n))
+        (valid-exit coll-node out)
+        (let [next-node (read-fn reader)]
+          (if (nil? next-node)
+            (invalid-exit coll-node reader out)
+            (let [tag (.-tag next-node)
+                  value (.-value next-node)
+                  children (.-children next-node)
+                  next-i (if (and (some? take-n) (some? count-pred))
+                           (cond-> i
+                                   (count-pred next-node) (inc))
+                           (inc i))]
+              (case tag
+                :unmatched-delimiter
+                (if
+                 (contains? (set *delimiter*) value)        ;; can match prev
+                  (do
+                    (unread reader value)
+                    (invalid-exit coll-node reader out))
+                  (recur next-i (conj out (report-invalid! next-node))))
 
-                  :splice
-                  (if take-n
-                    (let [[valid? taken-values remaining-values] (split-after-n take-n count-pred nil children)]
-                      (if valid?
-                        (Splice (doto coll-node
-                                  (-> .-children
-                                      (set! taken-values)))
-                                remaining-values)
-                        (invalid-exit (into out children))))
-                    (recur reader next-i (into out children)))
+                :splice
+                (if take-n
+                  (let [[valid? taken-values remaining-values] (split-after-n take-n count-pred nil children)]
+                    (if valid?
+                      (Splice (valid-exit coll-node taken-values)
+                              remaining-values)
+                      (invalid-exit coll-node reader (into out children))))
+                  (recur next-i (into out children)))
 
-                  :eof
-                  (invalid-exit out)
+                :eof
+                (invalid-exit coll-node reader out)
 
-                  :matched-delimiter
-                  (if (and take-n (not= take-n i))
-                    (do (unread reader value)
-                        (invalid-exit out))
-                    (doto coll-node
-                      (-> .-children
-                          (set! out))))
+                :matched-delimiter
+                (if (and take-n (not= take-n i))
+                  (do (unread reader value)
+                      (invalid-exit coll-node reader out))
+                  (valid-exit coll-node out))
 
-                  (recur reader next-i (conj out next-node)))))))))))
+                (recur next-i (conj out next-node))))))))))
 
 (defn NodeWithChildren
   [reader read-fn tag delimiter]
@@ -478,24 +475,24 @@
 (defn newline?
   [c]
   (perf/identical-in? [\newline
-                             \return]
+                       \return]
                       c))
 
 (defn space?
   [c]
   (perf/identical-in? [\space
-                             \tab
-                             non-breaking-space]
+                       \tab
+                       non-breaking-space]
                       c))
 
 (defn whitespace?
   [c]
   (perf/identical-in? [\,
-                             \space
-                             \newline
-                             \tab
-                             non-breaking-space
-                             \return]
+                       \space
+                       \newline
+                       \tab
+                       non-breaking-space
+                       \return]
                       c))
 
 (defn brace? [ch]

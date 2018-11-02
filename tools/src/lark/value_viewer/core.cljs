@@ -55,10 +55,10 @@
 (declare format-value)
 
 (v/defview display-deferred
-  {:view/will-mount (fn [{:keys [deferred view/state]}]
-                      (-> deferred
-                          (.addCallback #(swap! state assoc :value %1))
-                          (.addErrback #(swap! state assoc :error %))))}
+  {:view/did-mount (fn [{:keys [deferred view/state]}]
+                     (-> deferred
+                         (.addCallback #(swap! state assoc :value %1))
+                         (.addErrback #(swap! state assoc :error %))))}
   [{:keys [view/state]}]
   (let [{:keys [value error] :as s} @state]
     [:div
@@ -82,7 +82,7 @@
         class (if is-expanded?
                 "cursor-zoom-out hover-bg-darken "
                 "cursor-zoom-in gray hover-black")]
-    [:.dib {:class    class
+    [:.dib {:class class
             :on-click #(swap! state assoc :collection-expanded? (not is-expanded?))} label]))
 
 (defn update-attrs [el f & args]
@@ -104,7 +104,7 @@
   (ensure-keys (apply clojure.core/map args)))
 
 (v/defview format-collection
-  {:view/initial-state {:limit-n              20
+  {:view/initial-state {:limit-n 20
                         :collection-expanded? nil}}
   [{state :view/state :as this} depth value]
   (let [{:keys [limit-n]} @state
@@ -118,14 +118,14 @@
                                   [:.flex.items-start.nowrap (if (empty? value) (str space lb)
                                                                                 (toggle-depth this depth (str space lb space)))]
                                   [:div.v-top (interpose " " (map-with-keys (partial format-value (inc depth)) (take limit-n value)))]
-                                  (when more? [:.flex.items-end [expander-outter {:class    "pointer"
+                                  (when more? [:.flex.items-end [expander-outter {:class "pointer"
                                                                                   :on-click #(swap! state update :limit-n + 20)} "…"]])
                                   [:.flex.items-end.nowrap (str space rb space)]]
           :else [:.inline-flex.items-center.gray.nowrap
                  {:class hover-class} (toggle-depth this depth (str space lb "…" rb space))])))
 
 (v/defview format-map
-  {:view/initial-state {:limit-n              20
+  {:view/initial-state {:limit-n 20
                         :collection-expanded? nil}}
   [{state :view/state :as this} depth value]
   (let [{:keys [limit-n]} @state
@@ -161,7 +161,7 @@
         fn-name (gobj/get value "name" "ƒ")]
     [:span
      [expander-outter {:on-click #(swap! state update :expanded? not)}
-      [inline-centered  [:span.o-50.mr1 fn-name]
+      [inline-centered [:span.o-50.mr1 fn-name]
        (-> (if expanded? ArrowPointingUp
                          ArrowPointingDown)
            (update 1 assoc :width 20 :height 20 :class "mln1 mrn1 o-50"))]
@@ -184,8 +184,8 @@
          :else
          (case (kind value)
            (:vector
-             :sequence
-             :set) (format-collection depth value)
+            :sequence
+            :set) (format-collection depth value)
 
            :map (format-map depth value)
 

@@ -57,5 +57,5 @@
    (fn [node] (let [children (.-children node)]
                 (when-not (empty? children) children)))
    (fn [node children]
-     (doto node (-> .-children (set! children))))
+     (assoc node :children children))
    ast))

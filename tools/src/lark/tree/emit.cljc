@@ -48,14 +48,15 @@
     (if format/*pretty*
       (let [left-edge-width (or (some-> left .-length) 0)
             body-indent (+ left-edge-width (format/body-indent* start-indent loc 0))
-            topline-indent (+ left-edge-width start-indent)]
+            topline-indent (+ left-edge-width start-indent)
+            end (count children)]
         (loop [out (or left "")
                current-indent topline-indent
-               remaining children]
-          (if (empty? remaining)
+               i 0]
+          (if (= i end)
             (cond-> out
                     right (perf/str right))
-            (let [child (nth remaining 0)
+            (let [child (nth children i)
                   tag (.. child -node -tag)]
               (if (perf/identical? :newline tag)
                 (recur
@@ -63,7 +64,7 @@
                      (perf/str \newline)
                      (perf/str (format/spaces body-indent)))
                  body-indent
-                 (subvec remaining 1))
+                 (inc i))
                 (if-let [child-str (string* current-indent child)]
                   (recur
                    (perf/str out child-str)
@@ -71,10 +72,8 @@
                                                  (dec))]
                      child-length
                      (+ current-indent (.-length child-str)))
-                   (subvec remaining 1))
-                  (recur out
-                         current-indent
-                         (subvec remaining 1))))))))
+                   (inc i))
+                  (recur out current-indent (inc i))))))))
       (-> (apply str (mapv #(string* start-indent %) children))
           (cond->> left (perf/str left))
           (cond-> right (perf/str right))))))
