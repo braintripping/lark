@@ -1,15 +1,13 @@
 (ns lark.tree.node
   (:require [lark.tree.reader :as rd]
             [fast-zip.core :as z]
-   #?(:clj
-            [lark.tree.util :refer [contains-identical-keyword?]]))
-  #?(:cljs (:require-macros [lark.tree.util :refer [contains-identical-keyword?]])))
+            [chia.util.perf :as perf]))
 
 (defn comment?
   "Returns true if node is a comment - either `;` or `#_` but not `(comment ...)`"
   [node]
-  (contains-identical-keyword? [:comment :uneval]
-                               (.-tag node)))
+  (perf/keyword-in? [:comment :uneval]
+                    (.-tag node)))
 
 (defn whitespace?
   [node]
@@ -26,18 +24,18 @@
 
 (defn terminal-node? [node]
   (let [tag (.-tag node)]
-    (and (not (contains-identical-keyword? [:list :vector :map] tag))
-         (contains-identical-keyword? [:space
-                                       :symbol
-                                       :keyword
-                                       :token
-                                       :string
-                                       :number
-                                       :newline
-                                       :comma
-                                       :comment
-                                       :comment-block
-                                       :unmatched-delimiter] tag))))
+    (and (not (perf/keyword-in? [:list :vector :map] tag))
+         (perf/keyword-in? [:space
+                                            :symbol
+                                            :keyword
+                                            :token
+                                            :string
+                                            :number
+                                            :newline
+                                            :comma
+                                            :comment
+                                            :comment-block
+                                            :unmatched-delimiter] tag))))
 
 (def may-contain-children? (complement terminal-node?))
 
@@ -45,11 +43,11 @@
   "Returns true if node has 'edges' that mark boundaries. See unwrap/edges for details."
   [node]
   (when node
-    (contains? rd/edges (.-tag node))))
+    (boolean (rd/edges (.-tag node)))))
 
 (defn edges [node]
   (when node
-    (get rd/edges (.-tag node))))
+    (rd/edges (.-tag node))))
 
 (defn ast-zip
   "Given AST, returns zipper"

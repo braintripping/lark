@@ -5,26 +5,26 @@
             [lark.tree.reader :as rd]
             [lark.tree.range :as range]))
 
-(def prefix-parents (reduce-kv (fn [parents tag [_ right-bracket]]
-                                 (if (nil? right-bracket)
-                                   (conj parents tag)
-                                   parents)) #{} rd/edges))
+(defn prefix-parent? [tag]
+  (when-let [edges (rd/edges tag)]
+    (> (count edges) 1)))
 
 (defn include-prefix-parents [loc]
   (when loc
-    (if (contains? prefix-parents (some-> (z/up loc)
-                                          (.-node)
-                                          (.-tag)))
+    (if (some-> (z/up loc)
+                (.-node)
+                (.-tag)
+                (prefix-parent?))
       (include-prefix-parents (z/up loc))
       loc)))
 
 (defn iteratev-while [f start-loc]
   (when start-loc
     (loop [loc start-loc
-           out [start-loc]]
+           out (transient [start-loc])]
       (if-let [next-loc (f loc)]
-        (recur next-loc (conj out next-loc))
-        out))))
+        (recur next-loc (conj! out next-loc))
+        (persistent! out)))))
 
 (defn child-locs [loc]
   (iteratev-while z/right (z/down loc)))

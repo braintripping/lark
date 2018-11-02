@@ -2,7 +2,6 @@
          "test"]
  :deps {fast-zip {:mvn/version "0.7.0"}
         #_#_org.clojure/clojurescript {:mvn/version "1.10.437"}
-        net.cgrand/macrovich {:mvn/version "0.2.0"}
         lark/backtick {:mvn/version "0.1.0"}
         chia
         {:local/root "../../chia"

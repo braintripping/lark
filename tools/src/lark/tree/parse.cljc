@@ -5,6 +5,7 @@
   (:require [lark.tree.reader :as rd]
             [lark.tree.emit :as emit]
             [cljs.tools.reader.impl.commons :refer [parse-symbol]]
+            [chia.util.perf :as perf]
             [lark.tree.util :as util]
             [lark.tree.util :as util]
             #?@(:cljs
@@ -14,8 +15,6 @@
             #?@(:clj
                 [[clojure.tools.reader.reader-types :as r]
                  [clojure.tools.reader.edn :as edn]])))
-
-#?(:cljs (enable-console-print!))
 
 (declare parse-next)
 
@@ -52,7 +51,7 @@
     (identical? c \@) :deref
     (identical? c \,) :comma
 
-    (util/contains-identical? [\}
+    (perf/identical-in? [\}
                                \]
                                \)] c) :unmatched-delimiter
     (identical? c \') :quote
@@ -63,8 +62,8 @@
 (defn printable-only? [n]
   (when n
     (or
-     (util/contains-identical-keyword? [:space :comma :newline :comment :comment-block]
-                                       (.-tag n))
+     (perf/keyword-in? [:space :comma :newline :comment :comment-block]
+                       (.-tag n))
      (get (.-options n) :invalid?))))
 
 (defn take-printable-children
@@ -79,7 +78,7 @@
 ;; -------------- from cljs.tools.reader.edn ------------------
 
 (defn- macro-terminating? [ch]
-  (util/contains-identical? [")"
+  (perf/identical-in? [")"
                              "]"
                              "}"
                              "{"
@@ -99,8 +98,7 @@
             (macro-terminating? ch)
             (nil? ch))
       (do (r/unread rdr ch) out)
-      (recur #?(:cljs (js* "~{} += ~{}" out ch)
-                :clj  (str out ch)) (r/read-char rdr)))))
+      (recur (perf/str out ch) (r/read-char rdr)))))
 
 ;; -------------------------------------------------------------
 
@@ -262,13 +260,13 @@
 
       (:list
        :vector
-       :map) (rd/NodeWithChildren reader parse-next tag (get emit/bracket-match c))
+       :map) (rd/NodeWithChildren reader parse-next tag (emit/bracket-match c))
 
       :matched-delimiter (rd/ValueNode tag (r/read-char reader))
 
       :unmatched-delimiter (-> (rd/ValueNode tag (r/read-char reader))
                                (assoc :info {:direction :backward
-                                             :expects (get emit/bracket-match c)}))
+                                             :expects (emit/bracket-match c)}))
 
       :eof nil
 

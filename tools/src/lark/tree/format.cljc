@@ -4,7 +4,8 @@
             [lark.tree.node :as n]
             [lark.tree.util :as util]
             [lark.tree.range :as range]
-            [fast-zip.core :as z]))
+            [fast-zip.core :as z]
+            [chia.util.perf :as perf]))
 
 (def SPACES (str/join (take 200 (repeat " "))))
 
@@ -14,10 +15,9 @@
 (def ^:dynamic *pretty* false)
 
 (defn emit-space? [loc]
-  (and (some? (z/left loc))
-       (some? (z/right loc))
-       (not (n/newline? (some-> (z/left loc)
-                                (z/node))))))
+  (and (when-let [left (z/left loc)]
+         (not (n/newline? (z/node left))))
+       (some? (z/right loc))))
 
 (defn indentation-for [x]
   (case x
@@ -44,11 +44,10 @@
 
 (defn threading-node?
   [node]
-  (when-let [operator (and (= (.-tag node) :list)
-                           (some-> node
-                                   (.-children)
+  (when-let [operator (and (perf/identical? :list (.-tag node))
+                           (some-> (.-children node)
                                    (first)))]
-    (and (= :token (.-tag operator))
+    (and (perf/identical? :token (.-tag operator))
          (str/ends-with? (.-value operator) "->"))))
 
 (defn node-length [{:as node :keys [column end-column]}]
@@ -60,8 +59,8 @@
                      (- end-column column)))
 
 (defn whitespace-tag? [t]
-  (util/contains-identical-keyword? [:space :cursor :selection :tab :newline]
-                                    t))
+  (perf/keyword-in? [:space :cursor :selection :tab :newline]
+                    t))
 
 (defn butlast-vec [v]
   (cond-> v
@@ -72,38 +71,38 @@
   ([indent-level loc child]
    (assert (number? indent-level))
    (let [node (.-node loc)
-         tag (.-tag node)
-         children (.-children node)
-         operator (first children)
-         threading? (and (= tag :list)
-                         (some-> (z/up loc)
-                                 (.-node)
-                                 (threading-node?)))]
-     (if (and (= :list tag)
-              operator
-              (= :token (.-tag operator)))
-       (let [indent-type (indentation-for (name (.-value operator)))]
-         (case indent-type
-           :indent (+ indent-level 1)
-           (let [indent-offset (-> indent-type
-                                   (cond-> threading? (dec)))
-                 split-after (+ 2 indent-offset)
-                 [exact? taken _ num-passed] (->> (cond-> children
-                                                          (n/whitespace? operator) (butlast-vec))
-                                                  (rd/split-after-n split-after
-                                                                    n/sexp?
-                                                                    (fn [node]
-                                                                      (or (= :newline (.-tag node))
-                                                                          (= node child)))))]
-             (+ indent-level (cond exact? (reduce + 0 (mapv node-length (pop taken)))
-                                   (and (= num-passed 1)
-                                        (not threading?)) 0
-                                   :else 1)))))
-       (+ indent-level)))))
+         tag (.-tag node)]
+     (if-not (perf/identical? :list tag)
+       indent-level
+       (let [children (.-children node)
+             operator (first children)]
+         (if-not (perf/identical? :token (some-> operator .-tag))
+           indent-level
+           (let [indent-type (indentation-for (name (.-value operator)))]
+             (if (perf/identical? :indent indent-type)
+               (+ indent-level 1)
+               (let [threading? (and (perf/identical? :list tag)
+                                     (some-> (z/up loc)
+                                             (.-node)
+                                             (threading-node?)))
+                     indent-offset (-> indent-type
+                                       (cond-> threading? (dec)))
+                     split-after (+ 2 indent-offset)
+                     [exact? taken _ num-passed] (->> (cond-> children
+                                                              (n/whitespace? operator) (butlast-vec))
+                                                      (rd/split-after-n split-after
+                                                                        n/sexp?
+                                                                        (fn [node]
+                                                                          (or (perf/identical? :newline (.-tag node))
+                                                                              (= node child)))))]
+                 (+ indent-level (cond exact? (reduce + 0 (mapv node-length (pop taken)))
+                                       (and (identical? num-passed 1)
+                                            (not threading?)) 0
+                                       :else 1)))))))))))
 
 
 (defn indentation-parent? [node]
-  (util/contains-identical-keyword? [:vector :list :map] (.-tag node)))
+  (perf/keyword-in? [:vector :list :map] (.-tag node)))
 
 (defn body-indent-string [pos child-loc]
   (if-let [coll-loc (->> (iterate z/up child-loc)
@@ -113,7 +112,7 @@
                          (first))]
     (let [coll-node (z/node coll-loc)]
       (let [child (z/node child-loc)
-            left-edge-width (count (first (get rd/edges (.-tag coll-node))))
+            left-edge-width (count (first (rd/edges (.-tag coll-node))))
             body-indent (+ left-edge-width (body-indent* (:column coll-node) coll-loc child))]
         (spaces body-indent)))
     0))
@@ -124,6 +123,6 @@
   (if (or (rd/close-bracket? c2)
           (rd/open-bracket? c1)
           (rd/prefix-boundary? c1)
-          (= \# c1))
+          (identical? \# c1))
     false
     true))

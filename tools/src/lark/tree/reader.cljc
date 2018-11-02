@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [peek next])
   (:require
    [lark.tree.util :as util]
+   [chia.util.perf :as perf]
    #?@(:cljs [[cljs.tools.reader.reader-types :as r]
               [chia.util.js-interop :as j]]
        :clj  [[clojure.tools.reader.reader-types :as r]])))
@@ -21,39 +22,41 @@
     (- (.-s_pos indexing-reader)
        pushback)))
 
-(def edges
-  {:deref ["@"]
-   :list [\( \)]
-   :fn ["#"]
-   :map [\{ \}]
-   :meta ["^"]
-   :quote ["'"]
-   :reader-meta ["#^"]
-   :raw-meta ["^"]
-   :reader-macro ["#"]
-   :regex ["#"]
-   :set ["#"]
-   :string [\" \"]
-   :syntax-quote ["`"]
-   :unquote ["~"]
-   :unquote-splicing ["~@"]
-   :uneval ["#_"]
-   :var ["#'"]
-   :vector [\[ \]]
-   :reader-conditional ["#?"]
-   :reader-conditional-splice ["#?@"]
-   :selection [\‹ \›]})
+(defn edges [tag]
+  (case tag
+    :deref ["@"]
+    :list [\( \)]
+    :fn ["#"]
+    :map [\{ \}]
+    :meta ["^"]
+    :quote ["'"]
+    :reader-meta ["#^"]
+    :raw-meta ["^"]
+    :reader-macro ["#"]
+    :regex ["#"]
+    :set ["#"]
+    :string [\" \"]
+    :syntax-quote ["`"]
+    :unquote ["~"]
+    :unquote-splicing ["~@"]
+    :uneval ["#_"]
+    :var ["#'"]
+    :vector [\[ \]]
+    :reader-conditional ["#?"]
+    :reader-conditional-splice ["#?@"]
+    :selection [\‹ \›]
+    nil))
 
 (defn whitespace-tag? [tag]
-  (util/contains-identical-keyword?
+  (perf/keyword-in?
    [:space :newline :tab :comma :cursor :selection]
    tag))
 
 (defn close-bracket? [ch]
-  (util/contains-identical? [\) \] \}] ch))
+  (perf/identical-in? [\) \] \}] ch))
 
 (defn open-bracket? [ch]
-  (util/contains-identical? [\( \[ \{] ch))
+  (perf/identical-in? [\( \[ \{] ch))
 
 (defn throw-reader
   "Throw reader exception, including line/column."
@@ -75,8 +78,7 @@
       (cond (nil? c) (if passes?
                        (throw-reader reader "Unexpected EOF.")
                        out)
-            passes? (recur #?(:cljs (js* "~{} += ~{}" out c)
-                              :clj  (str out c)))
+            passes? (recur (perf/str out c))
             :else (do
                     (r/unread reader c)
                     out)))))
@@ -145,9 +147,9 @@
    ;; position not taken into account
     (and (some? other)
          (keyword-identical? tag (.-tag other))
-         (= children (.-children other))
          (= value (.-value other))
          (= range (.-range other))
+         (= children (.-children other))
          (= options (.-options other))))
 
   ;; ------------- Comparison by range --------------
@@ -202,8 +204,6 @@
 
   ILookup
   (-lookup [this key]
-    (-lookup this key nil))
-  (-lookup [this key not-found]
     (case key :tag tag
               :value value
               :children children
@@ -222,7 +222,9 @@
                       :column (nth range 1)}
               :end {:line (nth range 2)
                     :column (nth range 3)}
-              (get options key not-found)))
+              nil))
+  (-lookup [this key not-found]
+   (or (-lookup this key) not-found))
 
   ;; for debugging
   IPrintWithWriter
@@ -375,7 +377,7 @@
         invalid-exit (fn [out]
                        (case coll-tag
                          :base (assoc coll-node :children out)
-                         (Splice (let [[left right] (get edges coll-tag)
+                         (Splice (let [[left right] (edges coll-tag)
                                        width (count left)]
                                    (report-invalid!
                                     (doto (EmptyNode :unmatched-delimiter)
@@ -465,8 +467,7 @@
                            (set! out)))
             :else
             (recur (and (not escape?) (identical? c \\))
-                   #?(:cljs (js* "~{} += ~{}" out c)
-                      :clj  (str out c))))
+                   (perf/str out c)))
       (report-invalid!
        (assoc node :tag :token
                    :options {:tag (.-tag node)}
@@ -476,34 +477,34 @@
 
 (defn newline?
   [c]
-  (util/contains-identical? [\newline
+  (perf/identical-in? [\newline
                              \return]
-                            c))
+                      c))
 
 (defn space?
   [c]
-  (util/contains-identical? [\space
+  (perf/identical-in? [\space
                              \tab
                              non-breaking-space]
-                            c))
+                      c))
 
 (defn whitespace?
   [c]
-  (util/contains-identical? [\,
+  (perf/identical-in? [\,
                              \space
                              \newline
                              \tab
                              non-breaking-space
                              \return]
-                            c))
+                      c))
 
 (defn brace? [ch]
-  (util/contains-identical? [\( \) \[ \] \{ \} \"]
-                            ch))
+  (perf/identical-in? [\( \) \[ \] \{ \} \"]
+                      ch))
 
 (defn prefix-boundary? [ch]
-  (util/contains-identical? [\; \: \' \@ \^ \` \~ \\ nil]
-                            ch))
+  (perf/identical-in? [\; \: \' \@ \^ \` \~ \\ nil]
+                      ch))
 
 (defn boundary? [ch]
   (or (brace? ch)

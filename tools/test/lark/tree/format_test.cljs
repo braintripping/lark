@@ -1,6 +1,8 @@
 (ns lark.tree.format-test
   (:require [lark.tree.core :as tree]
-            [cljs.test :refer [deftest is are testing]]))
+            [cljs.test :refer [deftest is are testing]]
+            [lark.tree.parse :as parse]
+            [chia.util.js-interop :as j]))
 
 
 (deftest format
@@ -81,3 +83,4 @@
                                      "(a\n )"]
                                     (partition 2))]
                   (is (= (tree/format in) out)))))
+
