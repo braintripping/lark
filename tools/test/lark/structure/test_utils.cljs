@@ -6,12 +6,12 @@
 
 
 (def editor
-  (memoize (fn []
+  (memoize (fn ^js  []
              (CM (doto (.createElement js/document "div")
                    (->> (.appendChild js/document.body))) (clj->js {:mode "clojure"
                                                                     :magicBrackets true})))))
 
-(defn regex-replace [cm pattern replace-f]
+(defn regex-replace [^js cm pattern replace-f]
   (let [search-cursor (.getSearchCursor cm pattern (CM/Pos 0 0) true)]
     (loop [results []]
       (if (not (.findNext search-cursor))
@@ -26,7 +26,7 @@
                                 :head head
                                 :text (.getRange cm anchor head)})))))))
 
-(defn replace-selections [cm f]
+(defn replace-selections [^js cm f]
   (.replaceSelections cm (clj->js (mapv (fn [sel]
                                           (f {:anchor (.-anchor sel)
                                               :head (.-head sel)
@@ -34,7 +34,7 @@
 
 (defn deserialize-selections!
   "Turn <ranges> into selected ranges."
-  [cm]
+  [^js cm]
   (regex-replace cm #"(<[^>]*>)|\|" (fn [{:keys [text]}]
                                       (if (= text "|")
                                         ""
@@ -42,14 +42,14 @@
   cm)
 
 (defn serialize-selections!
-  [cm]
+  [^js cm]
   (replace-selections cm (fn [{:keys [text]}]
                            (if (= text "")
                              "|"
                              (str "<" text ">"))))
   cm)
 
-(defn exec [cm command]
+(defn exec [^js cm command]
   (command cm)
   cm)
 

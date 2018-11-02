@@ -119,9 +119,9 @@
                       (= :space)))
          (first))))
 
-(defn path-node-pred [{:keys [tag]}]
-  (or (= tag :newline)
-      (not (rd/whitespace-tag? tag))))
+(defn path-node-pred [node]
+  (or (= (.-tag node) :newline)
+      (not (rd/whitespace-tag? (.-tag node)))))
 
 (defn get-loc [zipper path]
   (loop [segments path

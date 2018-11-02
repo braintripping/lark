@@ -9,7 +9,8 @@
             [lark.tree.util :as util]
             #?@(:cljs
                 [[cljs.tools.reader.reader-types :as r]
-                 [cljs.tools.reader.edn :as edn]])
+                 [cljs.tools.reader.edn :as edn]
+                 [chia.util.js-interop :as j]])
             #?@(:clj
                 [[clojure.tools.reader.reader-types :as r]
                  [clojure.tools.reader.edn :as edn]])))
@@ -91,14 +92,15 @@
                              "("
                              "\\"] ch))
 
-(defn read-token* ^string [rdr initch]
+(defn read-token* ^string [rdr initial-ch]
   (loop [out ""
-         ch (do (r/unread rdr initch) initch)]
-    (cond (rd/whitespace? ch) out
-          (macro-terminating? ch) out
-          (nil? ch) out
-          :else
-          (recur (str out (r/read-char rdr)) (r/peek-char rdr)))))
+         ch initial-ch]
+    (if (or (rd/whitespace? ch)
+            (macro-terminating? ch)
+            (nil? ch))
+      (do (r/unread rdr ch) out)
+      (recur #?(:cljs (js* "~{} += ~{}" out ch)
+                :clj  (str out ch)) (r/read-char rdr)))))
 
 ;; -------------------------------------------------------------
 
@@ -128,16 +130,16 @@
   "Parse a single token."
   [reader]
   (let [ch (r/read-char reader)
-        token (if (identical? ch \\)
-                (str ch (read-to-char-boundary reader))
-                (read-token* reader ch))]
-    (rd/ValueNode :token token)
-    (if (some-> token
-                (subs 0 1)
-                (js/parseInt)
-                (js/isNaN))
-      (rd/ValueNode :token token)
-      (rd/ValueNode :number token))
+        token (if (identical? ch "\\")
+                (js* "~{} += ~{}" ch (read-to-char-boundary reader))
+                (read-token* reader ch))
+        tag (if (some-> token
+                        (subs 0 1)
+                        (js/parseInt)
+                        (js/isNaN))
+              :token
+              :number)]
+    (rd/ValueNode tag token)
     ;; TODO
     ;; is it important to detect invalid tokens?
     #_(try (let [[tag value] (let [value (edn/read-string token)]
@@ -300,7 +302,7 @@
                                               (let [node-str (subs s offset end-offset)]
                                                 [(str source node-str)
                                                  (conj values (assoc node :source node-str))]))
-                                            ["" []] (get base :children))
+                                            ["" []] (.-children base))
                   base (assoc base
                          :source source
                          :children children

@@ -38,7 +38,7 @@
 
 (defn edge-ranges [node]
   (when (n/has-edges? node)
-    (let [[left right] (get rd/edges (get node :tag))]
+    (let [[left right] (get rd/edges (.-tag node))]
       (cond-> []
               left (conj {:line       (:line node) :end-line (:line node)
                           :column     (:column node)
@@ -47,8 +47,8 @@
                            :column     (- (:end-column node) (count right))
                            :end-column (:end-column node)})))))
 
-(defn inner-range [{:keys [line column end-line end-column tag] :as node}]
-  (if-let [[left right] (get rd/edges tag)]
+(defn inner-range [{:keys [line column end-line end-column] :as node}]
+  (if-let [[left right] (get rd/edges (.-tag node))]
     {:line       line
      :column     (+ column (count left))
      :end-line   end-line
@@ -88,7 +88,7 @@
   "Get range(s) to highlight for a node. For a collection, only highlight brackets."
   [node]
   (if (n/may-contain-children? node)
-    (if (second (get rd/edges (get node :tag)))
+    (if (second (get rd/edges (.-tag node)))
       (edge-ranges node)
-      (update (edge-ranges (first (:children node))) 0 merge (bounds node :left)))
+      (update (edge-ranges (first (.-children node))) 0 merge (bounds node :left)))
     [node]))

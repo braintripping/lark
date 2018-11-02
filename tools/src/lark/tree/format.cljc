@@ -51,13 +51,13 @@
     (and (= :token (.-tag operator))
          (str/ends-with? (.-value operator) "->"))))
 
-(defn node-length [{:as node :keys [column end-column tag value]}]
-  (case tag :space (if (= node rd/*active-cursor-node*)
-                     (count value)
-                     1)
-            :tab 1
-            (:cursor :selection) 0
-            (- end-column column)))
+(defn node-length [{:as node :keys [column end-column]}]
+  (case (.-tag node) :space (if (= node rd/*active-cursor-node*)
+                              (count (.-value node))
+                              1)
+                     :tab 1
+                     (:cursor :selection) 0
+                     (- end-column column)))
 
 (defn whitespace-tag? [t]
   (util/contains-identical-keyword? [:space :cursor :selection :tab :newline]

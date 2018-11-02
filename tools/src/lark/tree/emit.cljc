@@ -156,86 +156,90 @@
 
 
 (defn as-code [forms]
-  (reduce (fn [out {:keys [tag] :as item}]
-            (if (tag-for-print-only? tag)
+  (reduce (fn [out node]
+            (if (tag-for-print-only? (.-tag node))
               out
-              (let [value (sexp item)]
+              (let [value (sexp node)]
                 (if (nil? value)
                   out
-                  ((if (contains? splice? tag) into conj)
+                  ((if (contains? splice? (.-tag node)) into conj)
                    out value))))) [] forms))
 
-(defn sexp [{:keys [tag value children options] :as node}]
+(defn sexp [node]
   (when node
-    (if (= :error tag)
-      (throw (#?(:cljs js/Error.
-                 :clj  Exception.) node))
-      (case tag
-        :base (as-code children)
+    (let [tag (.-tag node)
+          value (.-value node)
+          children (.-children node)
+          options (.-options node)]
+      (if (= :error tag)
+        (throw (#?(:cljs js/Error.
+                   :clj  Exception.) node))
+        (case tag
+          :base (as-code children)
 
-        (:space
-         :newline
-         :comma
-         :cursor) nil
+          (:space
+           :newline
+           :comma
+           :cursor) nil
 
-        (:selection) (some-> (seq children) (as-code))
+          (:selection) (some-> (seq children) (as-code))
 
-        :string value
+          :string value
 
-        :unmatched-delimiter ::INVALID_TOKEN
+          :unmatched-delimiter ::INVALID_TOKEN
 
-        :deref (template (deref ~(first (as-code children))))
+          :deref (template (deref ~(first (as-code children))))
 
-        (:token
-         :number) (try (edn/read-string value)
-                       (catch js/Error e ::INVALID_TOKEN))
+          (:token
+           :number) (try (edn/read-string value)
+                         (catch js/Error e ::INVALID_TOKEN))
 
-        :vector (vec (as-code children))
+          :vector (vec (as-code children))
 
-        :list (apply list (as-code children))
+          :list (apply list (as-code children))
 
-        :fn (fn-walk (first (as-code children)))
+          :fn (fn-walk (first (as-code children)))
 
-        :map (apply hash-map (as-code children))
+          :map (apply hash-map (as-code children))
 
-        :set (template #{~@(as-code (:children (first children)))})
+          :set (template #{~@(as-code (:children (first children)))})
 
-        :var (template #'~(first (as-code children)))
+          :var (template #'~(first (as-code children)))
 
-        (:quote :syntax-quote) (template (quote ~(first (as-code children))))
+          (:quote :syntax-quote) (template (quote ~(first (as-code children))))
 
-        :unquote (template (~'clojure.core/unquote ~(first (as-code children))))
+          :unquote (template (~'clojure.core/unquote ~(first (as-code children))))
 
-        :unquote-splicing (template (~'clojure.core/unquote-splicing ~(first (as-code children))))
+          :unquote-splicing (template (~'clojure.core/unquote-splicing ~(first (as-code children))))
 
-        :reader-macro (r/read-string (string node))
+          :reader-macro (r/read-string (string node))
 
-        (:reader-conditional
-         :reader-conditional-splice)
-        (let [[feature form] (->> (remove #(tag-for-print-only? (:tag %)) (:children (first children)))
-                                  (partition 2)
-                                  (filter (fn [[{feature :value} _]] (contains? *features* feature)))
-                                  (first))]
-          (if feature
-            (sexp form)
-            nil))
+          (:reader-conditional
+           :reader-conditional-splice)
+          (let [[feature form] (->> (remove #(tag-for-print-only? (:tag %)) (:children (first children)))
+                                    (partition 2)
+                                    (filter (fn [[{feature :value} _]] (contains? *features* feature)))
+                                    (first))]
+            (if feature
+              (sexp form)
+              nil))
 
-        (:meta
-         :reader-meta) (let [[m data] (as-code children)]
-                         (cond-> data
-                                 #?(:cljs (satisfies? IWithMeta data)
-                                    :clj  (instance? clojure.lang.IMeta data))
-                                 (with-meta (if (map? m) m {m true}))))
+          (:meta
+           :reader-meta) (let [[m data] (as-code children)]
+                           (cond-> data
+                                   #?(:cljs (satisfies? IWithMeta data)
+                                      :clj  (instance? clojure.lang.IMeta data))
+                                   (with-meta (if (map? m) m {m true}))))
 
-        :regex (re-pattern (first (as-code children)))
+          :regex (re-pattern (first (as-code children)))
 
-        :keyword (if (:resolve-ns? options)
-                   (let [resolved-ns (if-let [the-ns (namespace value)]
-                                       (str (get r/*alias-map* (symbol the-ns) the-ns))
-                                       *ns*)]
-                     (keyword resolved-ns (name value)))
-                   value)
+          :keyword (if (:resolve-ns? options)
+                     (let [resolved-ns (if-let [the-ns (namespace value)]
+                                         (str (get r/*alias-map* (symbol the-ns) the-ns))
+                                         *ns*)]
+                       (keyword resolved-ns (name value)))
+                     value)
 
-        (:comment
-         :comment-block
-         :uneval) nil))))
+          (:comment
+           :comment-block
+           :uneval) nil)))))

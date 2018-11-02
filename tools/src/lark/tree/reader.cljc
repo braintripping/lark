@@ -2,9 +2,9 @@
   (:refer-clojure :exclude [peek next])
   (:require
    [lark.tree.util :as util]
-   #?(:cljs [cljs.tools.reader.reader-types :as r]
-      :clj  [clojure.tools.reader.reader-types :as r]))
-  #?(:cljs (:import [goog.string StringBuffer])))
+   #?@(:cljs [[cljs.tools.reader.reader-types :as r]
+              [chia.util.js-interop :as j]]
+       :clj  [[clojure.tools.reader.reader-types :as r]])))
 
 (def ^:dynamic *invalid-nodes* nil)
 (def ^:dynamic *active-cursor-node* nil)
@@ -66,36 +66,25 @@
       (str fmt data
            " [at line " l ", column " c "]")))))
 
-(def buf #?(:cljs (StringBuffer.)
-            :clj  (StringBuilder.)))
-
 (defn read-while
   "Read while the chars fulfill the given condition. Does not consume the unmatching char."
-  [reader p? & [eof?]]
-  (let [eof? (if ^boolean (nil? eof?)
-               (not (p? nil))
-               eof?)]
-    #?(:cljs (.clear buf)
-       :clj  (.setLength buf 0))
-    (loop []
-      (if-let [c (r/read-char reader)]
-        (if ^boolean (p? c)
-          (do
-            (.append buf c)
-            (recur))
-          (do
-            (r/unread reader c)
-            #?(:cljs (.toString buf)
-               :clj  (str buf))))
-        (if ^boolean eof?
-          #?(:cljs (.toString buf)
-             :clj  (str buf))
-          (throw-reader reader "Unexpected EOF."))))))
+  [reader pred]
+  (loop [out ""]
+    (let [c (r/read-char reader)
+          passes? (pred c)]
+      (cond (nil? c) (if passes?
+                       (throw-reader reader "Unexpected EOF.")
+                       out)
+            passes? (recur #?(:cljs (js* "~{} += ~{}" out c)
+                              :clj  (str out c)))
+            :else (do
+                    (r/unread reader c)
+                    out)))))
 
 (defn read-until
   "Read until a char fulfills the given condition. Does not consume the matching char."
   [reader p?]
-  (read-while reader (complement p?) (p? nil)))
+  (read-while reader (complement p?)))
 
 (defn next
   "Read next char."
@@ -341,35 +330,40 @@
         [false out nil])
       (if (and (some? take-n) (identical? i take-n))
         [true out nil]
-        (let [{:keys [tag value children] :as next-node} (read-fn reader)
-              next-i (if (and (some? take-n) (some? count-pred))
-                       (cond-> i
-                               (count-pred next-node) (inc))
-                       (inc i))]
-          (case tag
-            :unmatched-delimiter
-            (if
-             (contains? (set *delimiter*) value)            ;; can match prev
-              (do
-                (unread reader value)
-                [false out nil])
-              (recur reader next-i (conj out (report-invalid! next-node))))
-
-            :splice
-            (if take-n
-              (split-after-n take-n count-pred nil children)
-              (recur reader next-i (into out children)))
-
-            (:eof nil)
+        (let [next-node (read-fn reader)]
+          (if (nil? next-node)
             [false out nil]
+            (let [next-i (if (and (some? take-n) (some? count-pred))
+                           (cond-> i
+                                   (count-pred next-node) (inc))
+                           (inc i))
+                  tag (.-tag next-node)
+                  value (.-value next-node)
+                  children (.-children next-node)]
+              (case tag
+                :unmatched-delimiter
+                (if
+                 (contains? (set *delimiter*) value)        ;; can match prev
+                  (do
+                    (unread reader value)
+                    [false out nil])
+                  (recur reader next-i (conj out (report-invalid! next-node))))
 
-            :matched-delimiter
-            (if (and take-n (not (identical? take-n i)))
-              (do (unread reader value)
-                  [false out nil])
-              [true out nil])
+                :splice
+                (if take-n
+                  (split-after-n take-n count-pred nil children)
+                  (recur reader next-i (into out children)))
 
-            (recur reader next-i (conj out next-node))))))))
+                :eof
+                [false out nil]
+
+                :matched-delimiter
+                (if (and take-n (not (identical? take-n i)))
+                  (do (unread reader value)
+                      [false out nil])
+                  [true out nil])
+
+                (recur reader next-i (conj out next-node))))))))))
 
 (defn conj-children
   [coll-node reader {:keys [:read-fn
@@ -384,60 +378,75 @@
                          (Splice (let [[left right] (get edges coll-tag)
                                        width (count left)]
                                    (report-invalid!
-                                    (-> (EmptyNode :unmatched-delimiter)
-                                        (assoc!
-                                         :options {:info {:tag coll-tag
-                                                          :direction :forward
-                                                          :expects right}}
-                                         :range [inner-line
+                                    (doto (EmptyNode :unmatched-delimiter)
+                                      (-> .-options
+                                          (set! {:info {:tag coll-tag
+                                                        :direction :forward
+                                                        :expects right}}))
+                                      (-> .-range
+                                          (set! [inner-line
                                                  (- inner-col width)
                                                  inner-line
                                                  inner-col
                                                  (- inner-offset width)
-                                                 inner-offset]
-                                         :value left)))) out)))]
+                                                 inner-offset]))
+                                      (-> .-value
+                                          (set! left))))) out)))]
     (loop [reader reader
            i 0
            out []]
       (if (> i 10000)
         (do
           (js/console.error (js/Error. "Infinite loop?"))
-          (assoc! coll-node :children out))
+          (doto coll-node
+            (-> .-children
+                (set! out))))
         (if (and (some? take-n) (identical? i take-n))
-          (assoc! coll-node :children out)
-          (let [{:keys [tag value children] :as next-node} (read-fn reader)
-                next-i (if (and (some? take-n) (some? count-pred))
-                         (cond-> i
-                                 (count-pred next-node) (inc))
-                         (inc i))]
-            (case tag
-              :unmatched-delimiter
-              (if
-               (contains? (set *delimiter*) value)          ;; can match prev
-                (do
-                  (unread reader value)
-                  (invalid-exit out))
-                (recur reader next-i (conj out (report-invalid! next-node))))
-
-              :splice
-              (if take-n
-                (let [[valid? taken-values remaining-values] (split-after-n take-n count-pred nil children)]
-                  (if valid?
-                    (Splice (assoc! coll-node :children taken-values)
-                            remaining-values)
-                    (invalid-exit (into out children))))
-                (recur reader next-i (into out children)))
-
-              (:eof nil)
+          (doto coll-node
+            (-> .-children
+                (set! out)))
+          (let [next-node (read-fn reader)]
+            (if (nil? next-node)
               (invalid-exit out)
+              (let [tag (.-tag next-node)
+                    value (.-value next-node)
+                    children (.-children next-node)
+                    next-i (if (and (some? take-n) (some? count-pred))
+                             (cond-> i
+                                     (count-pred next-node) (inc))
+                             (inc i))]
+                (case tag
+                  :unmatched-delimiter
+                  (if
+                   (contains? (set *delimiter*) value)      ;; can match prev
+                    (do
+                      (unread reader value)
+                      (invalid-exit out))
+                    (recur reader next-i (conj out (report-invalid! next-node))))
 
-              :matched-delimiter
-              (if (and take-n (not= take-n i))
-                (do (unread reader value)
-                    (invalid-exit out))
-                (assoc! coll-node :children out))
+                  :splice
+                  (if take-n
+                    (let [[valid? taken-values remaining-values] (split-after-n take-n count-pred nil children)]
+                      (if valid?
+                        (Splice (doto coll-node
+                                  (-> .-children
+                                      (set! taken-values)))
+                                remaining-values)
+                        (invalid-exit (into out children))))
+                    (recur reader next-i (into out children)))
 
-              (recur reader next-i (conj out next-node)))))))))
+                  :eof
+                  (invalid-exit out)
+
+                  :matched-delimiter
+                  (if (and take-n (not= take-n i))
+                    (do (unread reader value)
+                        (invalid-exit out))
+                    (doto coll-node
+                      (-> .-children
+                          (set! out))))
+
+                  (recur reader next-i (conj out next-node)))))))))))
 
 (defn NodeWithChildren
   [reader read-fn tag delimiter]
@@ -448,22 +457,20 @@
 (defn read-string-data
   [node reader]
   (ignore reader)
-  #?(:cljs (.clear buf)
-     :clj  (.setLength buf 0))
-  (loop [escape? false]
+  (loop [escape? false
+         out ""]
     (if-let [c (r/read-char reader)]
       (cond (and (not escape?) (identical? c \"))
-            (assoc! node :value #?(:cljs (.toString buf)
-                                   :clj  (str buf)))
+            (doto node (-> .-value
+                           (set! out)))
             :else
-            (do
-              (.append buf c)
-              (recur (and (not escape?) (identical? c \\)))))
+            (recur (and (not escape?) (identical? c \\))
+                   #?(:cljs (js* "~{} += ~{}" out c)
+                      :clj  (str out c))))
       (report-invalid!
        (assoc node :tag :token
-                   :options {:tag (:tag node)}
-                   :value (str \" #?(:cljs (.toString buf)
-                                     :clj  (str buf))))))))
+                   :options {:tag (.-tag node)}
+                   :value (str \" out))))))
 
 (def non-breaking-space \u00A0)
 
@@ -482,12 +489,13 @@
 
 (defn whitespace?
   [c]
-  (or (util/contains-identical? [\,
-                                 \space
-                                 \tab
-                                 non-breaking-space]
-                                c)
-      (newline? c)))
+  (util/contains-identical? [\,
+                             \space
+                             \newline
+                             \tab
+                             non-breaking-space
+                             \return]
+                            c))
 
 (defn brace? [ch]
   (util/contains-identical? [\( \) \[ \] \{ \} \"]

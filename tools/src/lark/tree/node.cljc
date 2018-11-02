@@ -56,6 +56,8 @@
   [ast]
   (z/zipper
    may-contain-children?
-   (fn [{:keys [children]}] (when-not (empty? children) children))
-   (fn [node children] (assoc node :children children))
+   (fn [node] (let [children (.-children node)]
+                (when-not (empty? children) children)))
+   (fn [node children]
+     (doto node (-> .-children (set! children))))
    ast))

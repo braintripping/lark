@@ -6,27 +6,27 @@
             [lark.tree.node :as node]
             [lark.tree.parse :as parse]))
 
-(defn emit-node-with-decoration [{:keys [tag options children] :as node
+(defn emit-node-with-decoration [{:as node
                                   {:keys [invalid? error]} :options}]
   (let [possibly-children? (node/may-contain-children? node)]
     (if possibly-children?
       (let [[l r] (node/edges node)]
-        [:span l (map emit-node-with-decoration children) r])
+        [:span l (map emit-node-with-decoration (.-children node)) r])
       (cond->> (emit/string node)
                invalid? (conj [:span.red])))))
 
 (defn emit-node-structure
-  [{:keys [tag options children] :as node}]
-  (let [tag (cond->> (str tag)
-                     (:invalid? options) (conj [:span.red])
+  [node]
+  (let [tag (cond->> (str (.-tag node))
+                     (:invalid? (.-options node)) (conj [:span.red])
                      (node/whitespace? node) (conj [:span.moon-gray]))]
     (if-not (node/may-contain-children? node)
       tag
       (-> [:span \[ [:span.b tag]]
           (into
-           (when-not (empty? children)
+           (when-not (empty? (.-children node))
              (interleave (repeat " ")
-                         (mapv emit-node-structure children))))
+                         (mapv emit-node-structure (.-children node)))))
           (conj \])))))
 
 (v/defview show-parse
@@ -34,23 +34,22 @@
    :view/initial-state (fn [_ _ s] {:value s})}
   [{:keys [view/state]}]
   (let [value (:value @state)
-        {:as node
-         :keys [children invalid-nodes]} (parse/ast value)
+        node (parse/ast value)
         emitted (emit/string node)]
     [:div.bb.b--near-white.mv3.flex
      {:style {:white-space "pre-wrap"}}
      [:.pa2 {:style {:width "25%" :height 40}}
       (CodeView {:value value
-                 :error-ranges invalid-nodes
+                 :error-ranges (:invalid-nodes node)
                  :on-update #(swap! state assoc :value %)})]
      [:.pa2 {:style {:width "25%"}}
-      (map emit-node-with-decoration children)]
+      (map emit-node-with-decoration (.-children node))]
      [:.pa2 {:style {:width "25%"}}
       (when-not (boolean (= emitted value))
         [:div
          [:div.red "(not= emitted input) \nemitted: \n" (prn-str emitted) "\nvalue: \n" (prn-str value)]
          (str "\n" emitted "\n")])
-      (interpose " " (map emit-node-structure children))]]))
+      (interpose " " (map emit-node-structure (.-children node)))]]))
 
 (v/defview cards []
   [:div.pa3
