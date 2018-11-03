@@ -8,6 +8,7 @@
             [lark.tree.node :as n]
             [lark.tree.nav :as nav]
             [chia.util.perf :as perf]
+            [chia.util :as u]
             #?@(:cljs [[cljs.tools.reader.edn :as edn]
                        [cljs.tools.reader :as r]])
             #?@(:clj
@@ -43,7 +44,8 @@
       (- (.-length s) last-line-start))))
 
 (defn wrap-children [start-indent loc children]
-  (let [tag (.. loc -node -tag)
+  (let [node (.-node loc)
+        tag (.-tag node)
         [left right] (rd/edges tag)]
     (if format/*pretty*
       (let [left-edge-width (or (some-> left .-length) 0)
@@ -141,8 +143,11 @@
                :unquote
                :unquote-splicing
                :var
-               :regex) (wrap-children indent loc (nav/child-locs loc))
-              (:meta :reader-meta) (wrap-children indent loc (nav/child-locs loc))
+               :regex
+               :meta
+               :reader-meta) (wrap-children indent loc (nav/child-locs loc))
+              :namespaced-map (str (get (.-options node) :prefix)
+                                   (wrap-children indent loc (nav/child-locs loc)))
               :string (str \" value \")
               :comment (str \; value)
               :comment-block (string/join (sequence (comp (map #(if (.test #"^\s*$" %)
@@ -197,6 +202,8 @@
            :newline
            :comma
            :cursor) nil
+
+
 
           (:selection) (some-> (seq children) (as-code))
 
@@ -255,6 +262,24 @@
                                          *ns*)]
                        (keyword resolved-ns (name value)))
                      value)
+
+          :namespaced-map (let [{:keys [namespace-name
+                                        resolve-ns?]} options
+                                m (sexp (first children))
+                                map-ns (if resolve-ns?
+                                         (if namespace-name
+                                           (str (or (get r/*alias-map* (symbol namespace-name))
+                                                    (throw (ex-info (str "Invalid value used as namespace in namespaced map: " namespace-name)
+                                                                    {:options options}))))
+                                           *ns*)
+                                         namespace-name)]
+                            (u/update-keys (fn [k]
+                                             (if-not (keyword? k)
+                                               k
+                                               (let [the-ns (namespace k)]
+                                                 (cond (nil? the-ns) (keyword map-ns (name k))
+                                                       (= "_" the-ns) (keyword (name k))
+                                                       :else k)))) m))
 
           (:comment
            :comment-block

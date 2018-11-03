@@ -6,4 +6,5 @@
         chia
         {:local/root "../../chia"
          #_#_:git/url "https://github.com/mhuebert/chia"
-         :sha "2686c1395ead75c6d92e9edcd2849ceafd4d2bdb"}}}
+         :sha "2686c1395ead75c6d92e9edcd2849ceafd4d2bdb"}
+        rewrite-cljs {:mvn/version "0.4.4"}}}

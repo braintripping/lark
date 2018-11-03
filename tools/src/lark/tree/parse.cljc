@@ -52,8 +52,8 @@
     (identical? c \,) :comma
 
     (perf/identical-in? [\}
-                               \]
-                               \)] c) :unmatched-delimiter
+                         \]
+                         \)] c) :unmatched-delimiter
     (identical? c \') :quote
     (identical? c \~) :unquote
     (identical? c \`) :syntax-quote
@@ -79,17 +79,17 @@
 
 (defn- macro-terminating? [ch]
   (perf/identical-in? [")"
-                             "]"
-                             "}"
-                             "{"
-                             "\""
-                             "["
+                       "]"
+                       "}"
+                       "{"
+                       "\""
+                       "["
 
-                             ;; the chars below are never found?
+                       ;; the chars below are never found?
 
-                             "^"
-                             "("
-                             "\\"] ch))
+                       "^"
+                       "("
+                       "\\"] ch))
 
 (defn read-token* ^string [rdr initial-ch]
   (loop [out ""
@@ -101,28 +101,6 @@
       (recur (perf/str out ch) (r/read-char rdr)))))
 
 ;; -------------------------------------------------------------
-
-(defn parse-keyword
-  [reader]
-  (let [ch (r/read-char reader)
-        resolve-ns? (= \: (r/peek-char reader))
-        _ (when resolve-ns?
-            (r/read-char reader))
-        token (read-token* reader ch)
-        expr (try (edn/read-string token)
-                  (catch js/Error e
-                    ::error))
-        full-token (cond->> token
-                            resolve-ns? (str ":"))]
-    #_(prn full-token expr)
-    ;; TODO
-    ;; is it important to validate whether this is a valid keyword?
-    (if (= expr ::error)
-      (rd/InvalidToken! :keyword (cond->> token
-                                          resolve-ns? (str ":")))
-      (rd/->Node :keyword
-                 (when resolve-ns?
-                   {:resolve-ns? resolve-ns?}) nil expr nil))))
 
 (defn parse-token
   "Parse a single token."
@@ -189,30 +167,68 @@
                     (rd/Splice after)))
         (into children after))))
 
+(defn parse-keyword
+  [reader]
+  (let [ch (r/read-char reader)
+        resolve-ns? (= \: (r/peek-char reader))
+        _ (when resolve-ns?
+            (r/read-char reader))
+        token (read-token* reader ch)
+        ;anonymous? (= token ":")
+        expr (try (edn/read-string token)
+                  (catch js/Error e
+                    ::error))]
+    (if (= expr ::error)
+      (rd/InvalidToken! :keyword
+                        (cond->> token
+                                 resolve-ns? (str ":")))
+      (rd/->Node :keyword
+                 (when resolve-ns?
+                   {:resolve-ns? resolve-ns?}) nil expr nil))))
+
 (defn parse-sharp
   [reader]
   (r/read-char reader)
   (case (r/peek-char reader)
     nil (rd/InvalidToken! :reader-macro "#")
-    \{ (take-n-children reader :set \# 1 :map)
-    \( (take-n-children reader :fn \# 1 :list)
-    \" (take-n-children reader :regex \# 1 :string)
-    \^ (do (r/read-char reader)
-           (take-n-children reader :reader-meta "#^" 2))
-    \' (do (r/read-char reader)
-           (take-n-children reader :var "#'" 1 :token))
-    \_ (do (r/read-char reader)
-           (take-n-children reader :uneval "#_" 1))
-    \? (do
-         (r/read-char reader)
-         (let [ch (r/peek-char reader)]
-           (if-let [tag (case ch
-                          \( :reader-conditional
-                          \@ (do (r/read-char reader)
-                                 :reader-conditional-splice)
-                          nil)]
-             (take-n-children reader tag (str "#?" (when (= ch \@ \@))) 1 :list)
-             (rd/InvalidToken! :reader-macro "#?"))))
+    "{" (take-n-children reader :set "#" 1 :map)
+    "(" (take-n-children reader :fn "#" 1 :list)
+    "\"" (take-n-children reader :regex "#" 1 :string)
+    "^" (do (r/read-char reader)
+            (take-n-children reader :reader-meta "#^" 2))
+    "'" (do (r/read-char reader)
+            (take-n-children reader :var "#'" 1 :token))
+    "_" (do (r/read-char reader)
+            (take-n-children reader :uneval "#_" 1))
+    "?" (do
+          (r/read-char reader)
+          (let [ch (r/peek-char reader)]
+            (if-let [tag (case ch
+                           "(" :reader-conditional
+                           "@" (do (r/read-char reader)
+                                   :reader-conditional-splice)
+                           nil)]
+              (take-n-children reader tag (str "#?" (when (= ch "@" "@"))) 1 :list)
+              (rd/InvalidToken! :reader-macro "#?"))))
+    ":" (let [ch (r/read-char reader)
+              resolve-ns? (= \: (r/peek-char reader))
+              _ (when resolve-ns?
+                  (r/read-char reader))
+              token (read-token* reader ch)
+              anonymous? (= token ":")
+              expr (when-not anonymous?
+                     (try (edn/read-string token)
+                          (catch js/Error e
+                            ::error)))
+              prefix (str "#" (when resolve-ns? ":") token)
+              options {:resolve-ns? resolve-ns?
+                       :namespace-name (some-> expr (name))
+                       :prefix prefix}]
+          (cond (perf/identical? :error expr) (rd/InvalidToken! :namespaced-map prefix)
+                (and (keyword? expr) (namespace expr)) (rd/InvalidToken! :namespaced-map prefix)
+                :else
+                (-> (take-n-children reader :namespaced-map prefix 1 :map)
+                    (assoc :options options))))
     ;; TODO
     ;; namespaced maps
     (rd/InvalidToken! :reader-macro "#")

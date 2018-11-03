@@ -177,6 +177,7 @@
   (-assoc [this k VAL]
     (case k
       :tag (Node. VAL options range value children)
+      :options (Node. tag VAL range value children)
       :value (Node. tag options range VAL children)
       :children (Node. tag options range value VAL)
       :range (Node. tag options VAL value children)
@@ -222,7 +223,7 @@
                       :column (nth range 1)}
               :end {:line (nth range 2)
                     :column (nth range 3)}
-              nil))
+              (get options key nil)))
   (-lookup [this key not-found]
     (or (-lookup this key) not-found))
 
@@ -231,12 +232,14 @@
   (-pr-writer [o writer _]
     (let [options (cond-> (dissoc options :source :invalid-nodes :cursor)
                           range (assoc :range range))]
-      (-write writer (str (if (or children (seq options))
-                            (cond-> [tag]
-                                    options (conj options)
-                                    value (conj value)
-                                    children (into children))
-                            tag))))))
+      (-write writer (str "Tree<" (cond (or children (seq options))
+                                        (cond-> [tag]
+                                                options (conj options)
+                                                value (conj value)
+                                                children (into children))
+                                        (= tag :string) (str "\"" (subs value 0 10) "\"")
+                                        (= tag :token) [:token value]
+                                        :else tag) ">")))))
 
 (defn delimiter-error [tag reader]
   (let [[line col] (position reader)]
