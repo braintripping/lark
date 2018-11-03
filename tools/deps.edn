@@ -1,10 +1,8 @@
 {:paths ["src"
          "test"]
  :deps {fast-zip {:mvn/version "0.7.0"}
-        #_#_org.clojure/clojurescript {:mvn/version "1.10.437"}
         lark/backtick {:mvn/version "0.1.0"}
-        chia
-        {:local/root "../../chia"
-         #_#_:git/url "https://github.com/mhuebert/chia"
-         :sha "2686c1395ead75c6d92e9edcd2849ceafd4d2bdb"}
+        chia {#_#_:local/root "../../chia"
+              :git/url "https://github.com/mhuebert/chia"
+              :sha "cdafc6590b06e197b3f7981b9b721ddc7f89e69f"}
         rewrite-cljs {:mvn/version "0.4.4"}}}

@@ -21,7 +21,7 @@
                                           true)})})
 
 (defn reset-value [^js editor next-value]
-  (.setValueAndRefresh editor next-value #_(or value default-value)))
+  (cm/set-value-and-refresh! editor next-value #_(or value default-value)))
 
 (v/defview CodeView
   {:spec/props {:event/mousedown :Function
@@ -54,10 +54,6 @@
                        (set! (.-view cm-editor) this)
 
                        (swap! cm-editor assoc :view this)
-
-                       (set! (.-setValueAndRefresh cm-editor)
-                             #(do (cm/set-preserve-cursor! cm-editor %)
-                                  (.refresh cm-editor)))
 
                        (swap! state assoc :cm-editor cm-editor)
 

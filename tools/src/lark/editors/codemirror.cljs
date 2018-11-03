@@ -103,6 +103,7 @@
       marker)))
 
 (defn return-to-temp-marker! [editor]
+  (prn :return-to-temp!)
   (when-let [[kind data] (::temp-marker editor)]
     (case kind :cursor (when-let [pos (.find data)]
                          (.setCursor editor pos nil #js {:scroll false}))
@@ -139,6 +140,10 @@
       (if (-> editor (aget "state" "focused"))
         (.setCursor editor cursor-pos nil #js {:scroll false}))))
   editor)
+
+(defn set-value-and-refresh! [editor value]
+  (set-preserve-cursor! editor value)
+  (.refresh editor))
 
 (defn range->positions
   "Given a Clojure-style column and line range, return Codemirror-compatible `from` and `to` positions"

@@ -117,7 +117,10 @@
                                   {:class hover-class}
                                   [:.flex.items-start.nowrap (if (empty? value) (str space lb)
                                                                                 (toggle-depth this depth (str space lb space)))]
-                                  [:div.v-top (interpose " " (map-with-keys (partial format-value (inc depth)) (take limit-n value)))]
+                                  [:div.v-top
+                                   (->> (take limit-n value)
+                                        (map-with-keys #(format-value (inc depth) %))
+                                        (interpose " "))]
                                   (when more? [:.flex.items-end [expander-outter {:class "pointer"
                                                                                   :on-click #(swap! state update :limit-n + 20)} "…"]])
                                   [:.flex.items-end.nowrap (str space rb space)]]
@@ -185,17 +188,17 @@
          (case (kind value)
            (:vector
             :sequence
-            :set) (format-collection depth value)
+            :set) [format-collection depth value]
 
-           :map (format-map depth value)
+           :map [format-map depth value]
 
            :var [:div
                  [:.o-50.mb2 (str value)]
-                 (format-value depth @value)]
+                 [format-value depth @value]]
 
            :nil "nil"
 
-           :function (format-function value)
+           :function [format-function value]
 
            :atom (wrap-value [[:span.gray.mr1 "#Atom"] nil]
                              (format-value depth (gobj/get value "state")))
