@@ -3,20 +3,31 @@
   (:require [fast-zip.core :as z]
             [lark.tree.node :as n]
             [lark.tree.reader :as rd]
-            [lark.tree.range :as range]))
+            [lark.tree.range :as range]
+            [chia.util.perf :as perf]))
 
-(defn prefix-parent? [tag]
-  (when-let [edges (rd/edges tag)]
-    (> (count edges) 1)))
+#_(defn prefix-is-integral [tag]
+    (perf/keyword-in? [:set
+                       :fn
+                       :regex] tag))
+
+(defn has-prefix? [tag]
+  (some-> (rd/edges tag)
+          (count)
+          (= 1))
+  #_(some-> (rd/edges tag)
+            (count)
+            (pos?)))
 
 (defn include-prefix-parents [loc]
-  (when loc
-    (if (some-> (z/up loc)
-                (.-node)
-                (.-tag)
-                (prefix-parent?))
-      (include-prefix-parents (z/up loc))
-      loc)))
+  (if (and loc
+           (nil? (z/left loc))
+           (some-> (z/up loc)
+                   (.-node)
+                   (.-tag)
+                   (has-prefix?)))
+    (include-prefix-parents (z/up loc))
+    loc))
 
 (defn iteratev-while [f start-loc]
   (when start-loc

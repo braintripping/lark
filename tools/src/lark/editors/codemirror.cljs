@@ -12,7 +12,9 @@
    [clojure.string :as string]
    [lark.tree.range :as range]
    [lark.tree.node :as node]
-   [lark.tree.nav :as nav]))
+   [lark.tree.nav :as nav]
+   [lark.tree.emit :as emit]
+   [lark.tree.reader :as rd]))
 
 (def ^:dynamic *get-ns* (fn [] (symbol "cljs.user")))
 
@@ -68,14 +70,14 @@
              :or {direction :left
                   ignore? node/whitespace?}}]
    (let [nav (case direction :left z/left :right z/right)
-         the-loc (if-not (ignore? (z/node loc))
+         the-loc (if-not (ignore? (.-node loc))
                    loc
-                   (if (and (= pos (select-keys (z/node loc) [:line :column]))
+                   (if (and (= pos (range/bounds (.-node loc) :left))
                             (nav loc)
-                            (not (ignore? (z/node (nav loc)))))
+                            (not (ignore? (.-node (nav loc)))))
                      (nav loc)
                      loc))]
-     (nav/include-prefix-parents the-loc))))
+     the-loc)))
 
 
 (defn set-temp-marker! [cm]
@@ -209,16 +211,40 @@
 
 (defn highlight-range [pos node]
   (if (and (node/has-edges? node)
-           (not= :string (:tag node))
+           #_(not= :string (:tag node))
            (range/within? (range/inner-range node) pos))
     (range/inner-range node)
     node))
 
+(defn at-end? [pos node]
+  (= (range/bounds pos :left)
+     (range/bounds node :right)))
+
+(defn at-start? [pos node]
+  (= (range/bounds pos :left)
+     (range/bounds node :left)))
+
+(defn at-edge? [pos node]
+  (or (at-end? pos node)
+      (at-start? pos node)))
+
 (defn select-at-cursor [{{:keys [loc pos]} :magic/cursor :as cm} top-loc?]
   (when-let [cursor-loc (sexp-near pos loc {:direction :left})]
     (let [pos (Pos->range (get-cursor cm))
-          node (if top-loc? (z/node (nav/top-loc cursor-loc))
-                            (highlight-range pos (z/node cursor-loc)))]
+          cursor-node (.-node cursor-loc)
+          node (cond top-loc?
+                     (-> cursor-loc
+                         nav/top-loc
+                         .-node)
+
+                     (at-end? pos cursor-node)
+                     (-> cursor-loc
+                         nav/include-prefix-parents
+                         .-node)
+                     :else
+                     (->> cursor-loc
+                          .-node
+                          (highlight-range pos)))]
       (when (and node (not (node/whitespace? node)))
         (temp-select-node! cm node)))))
 
@@ -267,13 +293,13 @@
 (defn set-zipper!
   ([editor zipper & [{:keys [decorate?]
                       :or {decorate? true}}]]
-   (let [ast (z/node zipper)]
+   (let [ast (.-node zipper)]
      (swap! editor merge {:zipper zipper
                           :ast ast})
      (when-let [on-ast (get-in editor [:view :on-ast])]
        (on-ast ast))
      (when decorate?
-       (highlight-parse-errors! editor (get (z/node zipper) :invalid-nodes))))))
+       (highlight-parse-errors! editor (get (.-node zipper) :invalid-nodes))))))
 
 (defn update-ast!
   [{{:as ast
@@ -298,13 +324,14 @@
     (when-let [pos (pos->boundary (get-cursor cm))]
       (when (or (not= pos prev-pos)
                 (not= prev-zipper zipper))
-        (when-let [loc (some-> zipper (nav/navigate pos))]
+        (when-let [loc (some-> zipper
+                               (nav/navigate pos))]
           (let [bracket-loc (sexp-near pos loc {:ignore? #(or (node/whitespace? %)
                                                               (get % :invalid?))})
-                bracket-node (z/node bracket-loc)]
+                bracket-node (.-node bracket-loc)]
             (when brackets? (match-brackets! cm bracket-node))
             (swap! cm update :magic/cursor merge {:loc loc
-                                                  :node (z/node loc)
+                                                  :node (.-node loc)
                                                   :bracket-loc bracket-loc
                                                   :bracket-node bracket-node
                                                   :pos pos
