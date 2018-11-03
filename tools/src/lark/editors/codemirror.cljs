@@ -103,7 +103,6 @@
       marker)))
 
 (defn return-to-temp-marker! [editor]
-  (prn :return-to-temp!)
   (when-let [[kind data] (::temp-marker editor)]
     (case kind :cursor (when-let [pos (.find data)]
                          (.setCursor editor pos nil #js {:scroll false}))

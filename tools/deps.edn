@@ -4,5 +4,4 @@
         lark/backtick {:mvn/version "0.1.0"}
         chia {#_#_:local/root "../../chia"
               :git/url "https://github.com/mhuebert/chia"
-              :sha "cdafc6590b06e197b3f7981b9b721ddc7f89e69f"}
-        rewrite-cljs {:mvn/version "0.4.4"}}}
+              :sha "fa0a51fb9cc2d513927bbc754e93afc59c467752"}}}
