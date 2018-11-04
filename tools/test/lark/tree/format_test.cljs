@@ -3,7 +3,6 @@
             [cljs.test :refer [deftest is are testing]]
             [lark.tree.parse :as parse]
             [chia.util.js-interop :as j]
-            [rewrite-clj.zip :as z]
             [clojure.string :as str]))
 
 

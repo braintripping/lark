@@ -29,7 +29,13 @@
   (-equiv [x y]
     (and y
          (= (.-ch x) (get y :column))
-         (= (.-line x) (get y :line))))
+         (= (.-line x) (get y :line))
+         (if-let [end-column (get y :end-column)]
+           (= (.-ch x) end-column)
+           true)
+         (if-let [end-line (get y :end-line)]
+           (= (.-line x) end-line)
+           true)))
   IPrintWithWriter
   (-pr-writer [pos writer _]
     (-write writer (str "#Pos[" (.-line pos) ", " (.-ch pos) "]")))
@@ -43,6 +49,8 @@
     ([o k]
      (case k :line (.-line o)
              :column (.-ch o)
+             :end-line (.-line o)
+             :end-column (.-ch o)
              (gobj/get o k)))
     ([o k not-found]
      (case k :line (.-line o)
@@ -230,7 +238,7 @@
 
 (defn select-at-cursor [{{:keys [loc pos]} :magic/cursor :as cm} top-loc?]
   (when-let [cursor-loc (sexp-near pos loc {:direction :left})]
-    (let [pos (Pos->range (get-cursor cm))
+    (let [pos (get-cursor cm)
           cursor-node (.-node cursor-loc)
           node (cond top-loc?
                      (-> cursor-loc

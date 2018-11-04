@@ -94,11 +94,13 @@
 (defn read-token* ^string [rdr initial-ch]
   (loop [out ""
          ch initial-ch]
-    (if (or (rd/whitespace? ch)
-            (macro-terminating? ch)
-            (nil? ch))
-      (do (r/unread rdr ch) out)
-      (recur (perf/str out ch) (r/read-char rdr)))))
+    (cond (or (rd/whitespace? ch)
+              (macro-terminating? ch)) (do (r/unread rdr ch) out)
+
+          (nil? ch) out
+
+          :else
+          (recur (perf/str out ch) (r/read-char rdr)))))
 
 ;; -------------------------------------------------------------
 
@@ -304,22 +306,23 @@
 (defn ast
   [s]
   (binding [rd/*invalid-nodes* (volatile! [])]
-    (let [reader (indexing-reader s)]
-      (as-> (rd/->Node :base nil nil nil nil) base
-            (rd/conj-children base reader {:read-fn parse-next})
-            (rd/assoc-range! base [0 0
-                                   (.-line reader)
-                                   (.-column reader)
-                                   0 (.-length s)])
-            (let [[source children] (reduce (fn [[source values] {:as node
-                                                                  :keys [offset end-offset]}]
-                                              (let [node-str (subs s offset end-offset)]
-                                                [(str source node-str)
-                                                 (conj values (assoc node :source node-str))]))
-                                            ["" []] (.-children base))
-                  base (assoc base
-                         :source source
-                         :children children
-                         :invalid-nodes (util/guard-> @rd/*invalid-nodes*
-                                                      (comp not empty?)))]
-              base)))))
+    (let [reader (indexing-reader s)
+          base (rd/conj-children (rd/->Node :base nil nil nil nil)
+                                 reader
+                                 {:read-fn parse-next})
+          base (rd/assoc-range! base [0 0
+                                      (dec (.-line reader))
+                                      (dec (.-column reader))
+                                      0 (.-length s)])]
+      (let [[source children]
+            (reduce (fn [[source values] {:as node
+                                          :keys [offset end-offset]}]
+                      (let [node-str (subs s offset end-offset)]
+                        [(str source node-str)
+                         (conj values (assoc node :source node-str))]))
+                    ["" []] (.-children base))]
+        (assoc base
+          :source source
+          :children children
+          :invalid-nodes (util/guard-> @rd/*invalid-nodes*
+                                       (comp not empty?)))))))

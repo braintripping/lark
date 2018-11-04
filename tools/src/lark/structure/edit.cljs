@@ -297,7 +297,7 @@
     (push-stack! cm (range/bounds node))))
 
 (defn push-cursor! [cm]
-  (push-stack! cm (cm/Pos->range (cm/get-cursor cm)))
+  (push-stack! cm (cm/get-cursor cm))
   (cm/unset-temp-marker! cm))
 
 (def expand-selection

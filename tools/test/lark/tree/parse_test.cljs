@@ -6,9 +6,7 @@
             [cljs.test :refer [deftest is are testing]]
             [lark.tree.reader :as rd]
             [lark.tree.ext :as ext]
-            [chia.util.js-interop :as j]
-            [cljs.tools.reader :as r]
-            [clojure.string :as str]))
+            [cljs.tools.reader :as r]))
 
 (def shape ext/shape)
 
@@ -169,91 +167,103 @@
 
                      ))))))
 
-(deftest invalid-forms
-  (binding [emit/*features* #{:cljs}]
-    (for [[in-string out] (->> '[[" "
-                                  "\n"
-                                  \tab
-                                  ",,\t\n"
-                                  "#_{}"
-                                  "; this is a comment\n"
-                                  ";; this is a comment\n"
-                                  "; this is a comment"
-                                  ";; this is a comment"
-                                  ";"
-                                  ";;"
-                                  ";\n"
-                                  ";;\n"] _
-                                 "4" 4
-                                 "sym" sym
-                                 "\"a\"" "a"
-                                 "'[" ::emit/INVALID_TOKEN
-                                 ["]"
-                                  "["
-                                  "^"
-                                  "#"
-                                  "#("
-                                  "#{"
-                                  "'"
-                                  "#{[]"] ::emit/INVALID_TOKEN
-                                 "3" 3
-                                 "\n" _
-                                 "[]" []
-                                 "()" ()
-                                 "@1" (deref 1)
-                                 "#(+)" (fn* [] (+))
-                                 "@()" (deref ())
-                                 "#{1}" #{1}
-                                 "#'wha" (var wha)
-                                 "~1" (clojure.core/unquote 1)
-                                 ["'1"
-                                  "`1"] (quote 1)
-                                 "#?(:clj 1 :cljs (+ 2))" [(+ 2)]
-                                 "^:yes {}" {}
-                                 "^{:no false} {}" {}
-                                 "::a/b" :a/b
-                                 ";a" _
-                                 "#_()" _
-                                 "(1)" (1)
-                                 "[1]" [1]
-                                 ["{1 2}"
-                                  "{1    2}"] {1 2}
+#_(deftest invalid-forms
+    (binding [emit/*features* #{:cljs}]
+      (for [[in-string out] (->> '[[" "
+                                    "\n"
+                                    \tab
+                                    ",,\t\n"
+                                    "#_{}"
+                                    "; this is a comment\n"
+                                    ";; this is a comment\n"
+                                    "; this is a comment"
+                                    ";; this is a comment"
+                                    ";"
+                                    ";;"
+                                    ";\n"
+                                    ";;\n"] _
+                                   "4" 4
+                                   "sym" sym
+                                   "\"a\"" "a"
+                                   "'[" ::emit/INVALID_TOKEN
+                                   ["]"
+                                    "["
+                                    "^"
+                                    "#"
+                                    "#("
+                                    "#{"
+                                    "'"
+                                    "#{[]"] ::emit/INVALID_TOKEN
+                                   "3" 3
+                                   "\n" _
+                                   "[]" []
+                                   "()" ()
+                                   "@1" (deref 1)
+                                   "#(+)" (fn* [] (+))
+                                   "@()" (deref ())
+                                   "#{1}" #{1}
+                                   "#'wha" (var wha)
+                                   "~1" (clojure.core/unquote 1)
+                                   ["'1"
+                                    "`1"] (quote 1)
+                                   "#?(:clj 1 :cljs (+ 2))" [(+ 2)]
+                                   "^:yes {}" {}
+                                   "^{:no false} {}" {}
+                                   "::a/b" :a/b
+                                   ";a" _
+                                   "#_()" _
+                                   "(1)" (1)
+                                   "[1]" [1]
+                                   ["{1 2}"
+                                    "{1    2}"] {1 2}
 
-                                 ["@sym"
-                                  "@  sym"] (deref sym)
-                                 ["'sym"
-                                  "' sym"
-                                  "`sym"
-                                  "`  sym"] (quote sym)
-                                 ["~sym"
-                                  "~  sym"] (clojure.core/unquote sym)
-                                 "~@sym" (clojure.core/unquote-splicing sym)
+                                   ["@sym"
+                                    "@  sym"] (deref sym)
+                                   ["'sym"
+                                    "' sym"
+                                    "`sym"
+                                    "`  sym"] (quote sym)
+                                   ["~sym"
+                                    "~  sym"] (clojure.core/unquote sym)
+                                   "~@sym" (clojure.core/unquote-splicing sym)
 
-                                 "#'sym" (var sym)
-                                 "#'\nsym" (var sym)
+                                   "#'sym" (var sym)
+                                   "#'\nsym" (var sym)
 
-                                 "^:wha" ::emit/INVALID_TOKEN
+                                   "^:wha" ::emit/INVALID_TOKEN
 
-                                 "#(+ 1 1)" #(+ 1 1)
+                                   "#(+ 1 1)" #(+ 1 1)
 
-                                 ["#^:wha {}"
-                                  "#^{:wha true} {}"] {}
+                                   ["#^:wha {}"
+                                    "#^{:wha true} {}"] {}
 
-                                 ;; regexp's are never equal
-                                 #_["#\"[A-B]\"" [#"[A-B]"]]]
-                               (apply hash-map)
-                               (reduce-kv (fn [m s v]
-                                            (if (vector? s)
-                                              (reduce (fn [m s]
-                                                        (assoc m s v)) m s)
-                                              (assoc m s v))) {}))
-          :let [expected-sexp (if (= '_ out) nil out)]]
-      (let [the-ast (tree/ast in-string)
-            the-sexp (-> the-ast
-                         (emit/sexp)
-                         (first))
-            the-str (emit/string the-ast)]
-        (is (= the-sexp expected-sexp)
-            "emit/sexp")
-        (is (= the-str in-string)
-            "emit/string")))))
+                                   ;; regexp's are never equal
+                                   #_["#\"[A-B]\"" [#"[A-B]"]]]
+                                 (apply hash-map)
+                                 (reduce-kv (fn [m s v]
+                                              (if (vector? s)
+                                                (reduce (fn [m s]
+                                                          (assoc m s v)) m s)
+                                                (assoc m s v))) {}))
+            :let [expected-sexp (if (= '_ out) nil out)]]
+        (let [the-ast (tree/ast in-string)
+              the-sexp (-> the-ast
+                           (emit/sexp)
+                           (first))
+              the-str (emit/string the-ast)]
+          (is (= the-sexp expected-sexp)
+              "emit/sexp")
+          (is (= the-str in-string)
+              "emit/string")))))
+
+(deftest ranges
+  (doall (for [s ["abracadabra"
+                  "a"
+                  "1"
+                  ":a"
+                  "[abc]"]
+               :let [ast (parse/ast s)]]
+           (is (= (count s)
+                  (- (:end-column ast)
+                     (:column ast)))
+               (str "Range length equal for: " s)))))

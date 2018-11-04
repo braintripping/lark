@@ -211,8 +211,8 @@
               :range range
               :line (nth range 0)
               :column (nth range 1)
-              :end-line (nth range 2)
-              :end-column (nth range 3)
+              :end-line (+ (nth range 0) (nth range 2))
+              :end-column (+ (nth range 1) (nth range 3))
               :offset (nth range 4)
               :end-offset (nth range 5)
               :options options
@@ -221,8 +221,8 @@
               ;; see if we should keep this
               :start {:line (nth range 0)
                       :column (nth range 1)}
-              :end {:line (nth range 2)
-                    :column (nth range 3)}
+              :end {:line (+ (nth range 0) (nth range 2))
+                    :column (+ (nth range 1) (nth range 3))}
               (get options key nil)))
   (-lookup [this key not-found]
     (or (-lookup this key) not-found))
@@ -265,8 +265,10 @@
        [start-line
         start-column
 
-        (dec (.-line reader))
-        (dec (.-column reader))
+        (- (dec (.-line reader))
+           start-line)
+        (- (dec (.-column reader))
+           start-column)
 
         start-offset
         (current-offset reader)]))))
@@ -388,8 +390,8 @@
                    (-> .-range
                        (set! [inner-line
                               (- inner-col width)
-                              inner-line
-                              inner-col
+                              0 #_inner-line
+                              width #_inner-col
                               (- inner-offset width)
                               inner-offset]))
                    (-> .-value
