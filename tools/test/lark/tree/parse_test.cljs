@@ -6,7 +6,8 @@
             [cljs.test :refer [deftest is are testing]]
             [lark.tree.reader :as rd]
             [lark.tree.ext :as ext]
-            [cljs.tools.reader :as r]))
+            [cljs.tools.reader :as r]
+            [lark.tree.format :as format]))
 
 (def shape ext/shape)
 
@@ -83,7 +84,7 @@
 
     (testing "always re-emits the same string"
       (are [in-string]
-        (is (= in-string (tree/format in-string)))
+        (is (= in-string (tree/format-string in-string)))
         "("
         ")"
         "#{([(^.\" # ^ # . !@#$%6 65465436542150- < >>< <  ~!~ !@ ~ ' * % $"

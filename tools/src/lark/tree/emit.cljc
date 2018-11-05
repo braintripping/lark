@@ -2,8 +2,7 @@
   (:refer-clojure :exclude [*ns*])
   (:require [fast-zip.core :as z]
             [lark.tree.fn :refer [fn-walk]]
-            [clojure.string :as string]
-            [lark.tree.format :as format]
+            [clojure.string :as str]
             [lark.tree.reader :as rd]
             [lark.tree.node :as n]
             [lark.tree.nav :as nav]
@@ -14,8 +13,7 @@
             #?@(:clj
                 [[clojure.tools.reader.edn :as edn]
                  [clojure.tools.reader :as r]
-                 [lark.backtick.core :refer [template]]])
-            [clojure.string :as str])
+                 [lark.backtick.core :refer [template]]]))
   #?(:cljs (:require-macros [lark.backtick.core :refer [template]]
                             [lark.tree.util :as util])))
 
@@ -34,94 +32,56 @@
           \] \[
           nil))
 
-(def tag-for-print-only? #{:comment :comment-block :uneval :space :newline :comma})
+(defn tag-for-print-only? [tag]
+  (perf/keyword-in? [:space
+                     :newline
+                     :comma
+                     :comment
+                     :comment-block
+                     :uneval]
+                    tag))
+
+(defn wrap-value [tag value]
+  (let [[left right] (rd/edges tag)]
+    (-> value
+        (cond->> left (perf/str left))
+        (cond-> right (perf/str right)))))
+
 
 (declare string*)
 
-(defn last-line-length [s]
-  (let [last-line-start (.lastIndexOf s \newline)]
-    (when-not (identical? -1 last-line-start)
-      (- (.-length s) last-line-start))))
+(defn wrap-children [outer-indent node]
+  (let [tag (.-tag node)
+        [left right] (rd/edges tag)
+        body-str (str/join (mapv #(string* outer-indent %) (.-children node)))]
+    (-> body-str
+        (cond->> left (perf/str left))
+        (cond-> right (perf/str right)))))
 
-(defn wrap-children [start-indent loc children]
-  (let [node (.-node loc)
-        tag (.-tag node)
-        [left right] (rd/edges tag)]
-    (if format/*pretty*
-      (let [left-edge-width (or (some-> left .-length) 0)
-            body-indent (+ left-edge-width (format/body-indent* start-indent loc 0))
-            topline-indent (+ left-edge-width start-indent)
-            end (count children)]
-        (loop [out (or left "")
-               current-indent topline-indent
-               i 0]
-          (if (= i end)
-            (cond-> out
-                    right (perf/str right))
-            (let [child (nth children i)
-                  tag (.. child -node -tag)]
-              (if (perf/identical? :newline tag)
-                (recur
-                 (-> out
-                     (perf/str \newline)
-                     (perf/str (format/spaces body-indent)))
-                 body-indent
-                 (inc i))
-                (if-let [child-str (string* current-indent child)]
-                  (recur
-                   (perf/str out child-str)
-                   (if-let [child-length (some-> (last-line-length child-str)
-                                                 (dec))]
-                     child-length
-                     (+ current-indent (.-length child-str)))
-                   (inc i))
-                  (recur out current-indent (inc i))))))))
-      (-> (apply str (mapv #(string* start-indent %) children))
-          (cond->> left (perf/str left))
-          (cond-> right (perf/str right))))))
-
-#_(defn children? [{:keys [tag]}]
-    (#{:list :fn :map :meta :set :vector :uneval} tag))
-(def log (volatile! {}))
-(js/setTimeout #(->> @log
-                     (seq)
-                     (sort-by second)
-                     (reverse)
-                     (interpose \newline)
-                     (print))
-               2000)
 (defn string*
   "Emit ClojureScript string from a magic-tree AST"
-  [indent loc]
-  (when (some? loc)
-    (let [node (.-node loc)
-          tag (.-tag node)
+  [indent node]
+  (when (some? node)
+    (let [tag (.-tag node)
           value (.-value node)]
       (cond (perf/!keyword-identical? :token tag) value
-            (perf/!keyword-identical? :space tag) (if format/*pretty*
-                                                    (cond
-                                                      (some-> rd/*active-cursor-node*
-                                                              (= node)) value #_(format/spaces (min 2 (.-length value))) ;;value
-                                                      (format/emit-space? loc) " ")
-                                                    value)
-            (perf/keyword-in? [:list :vector :map] tag) (wrap-children indent loc (nav/child-locs loc))
+            (perf/!keyword-identical? :space tag) value
+            (perf/keyword-in? [:list :vector :map] tag) (wrap-children indent node)
             :else
             (case tag
               :error nil
               :unmatched-delimiter value
 
-              :base (wrap-children 0 loc (nav/child-locs loc))
+              :base (wrap-children 0 node)
 
               (:symbol
                :number) value
 
               :comma value
-              :newline (if format/*pretty*
-                         (perf/str \newline (format/spaces indent))
-                         value)
+              :newline value
 
               :selection (when *print-selections*
-                           (wrap-children indent loc (nav/child-locs loc)))
+                           (wrap-children indent node))
 
               :cursor (when *print-selections* "|")
 
@@ -145,16 +105,16 @@
                :var
                :regex
                :meta
-               :reader-meta) (wrap-children indent loc (nav/child-locs loc))
+               :reader-meta) (wrap-children indent node)
               :namespaced-map (str (get (.-options node) :prefix)
-                                   (wrap-children indent loc (nav/child-locs loc)))
+                                   (wrap-children indent node))
               :string (str \" value \")
               :comment (str \; value)
-              :comment-block (string/join (sequence (comp (map #(if (.test #"^\s*$" %)
-                                                                  %
-                                                                  (str ";; " %)))
-                                                          (interpose "\n"))
-                                                    (string/split-lines value)))
+              :comment-block (str/join (sequence (comp (map #(if (.test #"^\s*$" %)
+                                                               %
+                                                               (str ";; " %)))
+                                                       (interpose "\n"))
+                                                 (str/split-lines value)))
 
               :keyword (if (:resolve-ns? (.-options node))
                          (str "::" (some-> (namespace value) (str "/")) (name value))
@@ -162,12 +122,10 @@
 
               nil "")))))
 
-(defn string [loc]
+(defn string [ast]
   (string* 0
-           (cond-> loc
-                   (and loc
-                        (not= (type loc) z/ZipperLocation))
-                   (n/ast-zip))))
+           (cond-> ast (= (type ast) z/ZipperLocation)
+                   (.-node))))
 
 (declare sexp)
 
@@ -239,7 +197,7 @@
 
           (:reader-conditional
            :reader-conditional-splice)
-          (let [[feature form] (->> (remove #(tag-for-print-only? (:tag %)) (:children (first children)))
+          (let [[feature form] (->> (remove #(tag-for-print-only? (.-tag %)) (.-children (first children)))
                                     (partition 2)
                                     (filter (fn [[{feature :value} _]] (contains? *features* feature)))
                                     (first))]
@@ -284,3 +242,145 @@
           (:comment
            :comment-block
            :uneval) nil)))))
+
+(defn ast
+  "Adds emitted source to ast root + top-level nodes"
+  [base]
+  (let [[source children]
+        (reduce (fn [[source values] node]
+                  (let [node-str (string* 0 node)]
+                    [(str source node-str)
+                     (conj! values
+                            (assoc node :string node-str))]))
+                ["" (transient [])] (.-children base))]
+    (-> base
+        (assoc :string source
+               :children (persistent! children)))))
+
+(defn zip [loc]
+  (-> loc
+      .-node
+      (ast)
+      (n/ast-zip)))
+
+(comment
+ (declare string*-old)
+
+ (defn wrap-children-old [outer-indent loc children]
+   (let [node (.-node loc)
+         tag (.-tag node)
+         [left right] (rd/edges tag)
+         body-str (if-not format/*pretty*
+                    (str/join (mapv #(string*-old outer-indent %) children))
+                    (let [left-edge-width (if left
+                                            (.-length left)
+                                            0)
+                          inner-indent (+ left-edge-width outer-indent)
+                          body-indent (+ left-edge-width (format/body-indent* outer-indent loc))
+                          child-count (count children)]
+                      (loop [out ""
+                             current-indent inner-indent
+                             i 0]
+                        (if (identical? i child-count)
+                          out
+                          (let [child (nth children i)
+                                tag (.. child -node -tag)]
+                            (if (perf/identical? :newline tag)
+                              (recur
+                               (-> out
+                                   (perf/str \newline)
+                                   (perf/str (format/spaces body-indent)))
+                               body-indent
+                               (inc i))
+                              (if-let [child-str (string*-old current-indent child)]
+                                (recur
+                                 (perf/str out child-str)
+                                 (if-let [child-length (some-> (format/last-line-length child-str)
+                                                               (dec))]
+                                   child-length
+                                   (+ current-indent (.-length child-str)))
+                                 (inc i))
+                                (recur out current-indent (inc i)))))))))]
+     (-> body-str
+         (cond->> left (perf/str left))
+         (cond-> right (perf/str right)))))
+
+
+ (defn string*-old
+   "Emit ClojureScript string from a magic-tree AST"
+   [indent loc]
+   (when (some? loc)
+     (let [node (.-node loc)
+           tag (.-tag node)
+           value (.-value node)]
+       (cond (perf/!keyword-identical? :token tag) value
+             (perf/!keyword-identical? :space tag) (if format/*pretty*
+                                                     (cond
+                                                       (some-> rd/*active-cursor-node*
+                                                               (= node)) value #_(format/spaces (min 2 (.-length value))) ;;value
+                                                       (format/emit-space? loc) " ")
+                                                     value)
+             (perf/keyword-in? [:list :vector :map] tag) (wrap-children-old indent loc (nav/child-locs loc))
+             :else
+             (case tag
+               :error nil
+               :unmatched-delimiter value
+
+               :base (wrap-children-old 0 loc (nav/child-locs loc))
+
+               (:symbol
+                :number) value
+
+               :comma value
+               :newline (if format/*pretty*
+                          (perf/str \newline (format/spaces indent))
+                          value)
+
+               :selection (when *print-selections*
+                            (wrap-children-old indent loc (nav/child-locs loc)))
+
+               :cursor (when *print-selections* "|")
+
+               :token value
+               ;:space moved above
+               (:list
+                :vector
+                :map
+
+                :deref
+                :fn
+                :quote
+                :reader-macro
+                :reader-conditional
+                :reader-conditional-splice
+                :set
+                :syntax-quote
+                :uneval
+                :unquote
+                :unquote-splicing
+                :var
+                :regex
+                :meta
+                :reader-meta) (wrap-children-old indent loc (nav/child-locs loc))
+               :namespaced-map (str (get (.-options node) :prefix)
+                                    (wrap-children-old indent loc (nav/child-locs loc)))
+               :string (str \" value \")
+               :comment (str \; value)
+               :comment-block (str/join (sequence (comp (map #(if (.test #"^\s*$" %)
+                                                                %
+                                                                (str ";; " %)))
+                                                        (interpose "\n"))
+                                                  (str/split-lines value)))
+
+               :keyword (if (:resolve-ns? (.-options node))
+                          (str "::" (some-> (namespace value) (str "/")) (name value))
+                          (str value))
+
+               nil "")))))
+
+ (defn string-old [loc]
+   (string*-old 0
+                (cond-> loc
+                        (and loc
+                             (not= (type loc) z/ZipperLocation))
+                        (n/ast-zip)))))

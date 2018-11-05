@@ -4,7 +4,8 @@
             [lark.tree.node :as n]
             [lark.tree.range :as range]
             [lark.tree.reader :as r]
-            [lark.tree.util :as util]))
+            [lark.tree.util :as util]
+            [cljs.pprint :as pp]))
 
 (defn pos-offset [{node-line :line
                    node-col :column} {pos-line :line
@@ -102,6 +103,9 @@
       (resolve-offset data (z/node space-loc)))
     (let [loc (nav/get-loc zipper path)
           node (z/node loc)]
+      #_(pp/pprint {:found-the-node node
+                  :sticky sticky
+                  :range (range/inner-range node)})
       (assoc (case sticky
                :outer-right (range/bounds node :right)
                :outer-left (range/bounds node :left)

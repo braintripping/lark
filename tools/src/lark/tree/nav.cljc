@@ -127,7 +127,8 @@
          (filter #(-> %
                       (.-node)
                       (.-tag)
-                      (= :space)))
+                      #{:space
+                        :newline}))
          (first))))
 
 (defn path-node-pred [node]
@@ -157,8 +158,23 @@
                         (filter path-node-pred)
                         (count)) out)))))
 
-(defn find-next [ast pred]
-  (->> (iterate z/next ast)
+(defn find-next [loc pred]
+  (->> (iterate z/next loc)
        (take-while #(and % (not (z/end? %))))
        (filter (comp pred z/node))
        (first)))
+
+(defn left-node [^z/ZipperLocation loc]
+  (-> (.-path loc) .-l peek))
+
+(defn right-node [^z/ZipperLocation loc]
+  (some-> (.-path loc)
+          .-r
+          first))
+
+(defn up-node
+  "Returns the loc of the parent of the node at this loc, or nil if at the top"
+  [^z/ZipperLocation loc]
+  (let [^z/ZipperPath path (.-path loc)]
+    (some-> (and path (.-pnodes path))
+            (peek))))

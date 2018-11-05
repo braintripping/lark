@@ -319,10 +319,10 @@
                                           :keys [offset end-offset]}]
                       (let [node-str (subs s offset end-offset)]
                         [(str source node-str)
-                         (conj values (assoc node :source node-str))]))
+                         (conj values (assoc node :string node-str))]))
                     ["" []] (.-children base))]
         (assoc base
-          :source source
+          :string source
           :children children
           :invalid-nodes (util/guard-> @rd/*invalid-nodes*
                                        (comp not empty?)))))))

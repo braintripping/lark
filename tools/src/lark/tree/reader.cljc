@@ -24,6 +24,7 @@
 
 (defn edges [tag]
   (case tag
+    :comment [";"]
     :deref ["@"]
     :list [\( \)]
     :fn ["#"]
@@ -181,6 +182,8 @@
       :value (Node. tag options range VAL children)
       :children (Node. tag options range value VAL)
       :range (Node. tag options VAL value children)
+      :line (Node. tag options (assoc range 0 VAL) value children)
+      :column (Node. tag options (assoc range 1 VAL) value children)
       (Node. tag (assoc options k VAL) range value children)))
 
   ITransientAssociative
@@ -230,16 +233,12 @@
   ;; for debugging
   IPrintWithWriter
   (-pr-writer [o writer _]
-    (let [options (cond-> (dissoc options :source :invalid-nodes :cursor)
-                          range (assoc :range range))]
-      (-write writer (str "Tree<" (cond (or children (seq options))
-                                        (cond-> [tag]
-                                                options (conj options)
-                                                value (conj value)
-                                                children (into children))
-                                        (= tag :string) (str "\"" (subs value 0 10) "\"")
-                                        (= tag :token) [:token value]
-                                        :else tag) ">")))))
+    (let [options (dissoc options :string :invalid-nodes :cursor)]
+      (-write writer (str (cond-> [tag]
+                                  range (conj (subvec range 0 4))
+                                  (seq options) (conj options)
+                                  (string? value) (conj (subs value 0 10))
+                                  children (conj children)) ">")))))
 
 (defn delimiter-error [tag reader]
   (let [[line col] (position reader)]
@@ -511,3 +510,6 @@
 (defn boundary? [ch]
   (or (brace? ch)
       (prefix-boundary? ch)))
+
+(defn get-line [^Node node]
+  (-> node .-range (nth 0)))

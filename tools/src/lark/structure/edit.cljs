@@ -22,25 +22,27 @@
 (defn format!
   ([editor] (format! editor {}))
   ([editor {:keys [preserve-cursor-space?]}]
-   (let [pre-val (.getValue editor)
-         pre-zipper (tree/string-zip pre-val)
-         pre-pos (cm/pos->boundary (cm/get-cursor editor))
+   (let [source (.getValue editor)
+         zipper (tree/string-zip source)
+         pos (cm/pos->boundary (cm/get-cursor editor))
          cursor-loc (when preserve-cursor-space?
-                      (nav/cursor-space-loc pre-zipper pre-pos))
-         post-val (binding [r/*active-cursor-node* (some-> cursor-loc
-                                                           (z/node))]
-                    (tree/format pre-zipper))
-         post-zipper (tree/string-zip post-val)]
+                      (nav/cursor-space-loc zipper pos))
+         formatted-zipper (binding [r/*active-cursor-node* (some-> cursor-loc
+                                                                   (z/node))]
+                            (tree/format-zip zipper))
+         formatted-source (-> formatted-zipper
+                              .-node
+                              :string)]
 
-     (when (not= pre-val post-val)                          ;; only mutate editor if value has changed
-       (.setValue editor post-val))
-
-     (->> (cursor/path pre-zipper pre-pos cursor-loc)       ;; cursor path from pre-format zipper, ignoring whitespace
-          (cursor/position post-zipper)                     ;; returns position in post-format zipper for path
+     (when (not= source formatted-source)                   ;; only mutate editor if value has changed
+       (.setValue editor formatted-source))
+     (prn :path (cursor/path zipper pos cursor-loc))
+     (->> (cursor/path zipper pos cursor-loc)               ;; cursor path from pre-format zipper, ignoring whitespace
+          (cursor/position formatted-zipper)                ;; returns position in post-format zipper for path
           (cm/range->Pos)
           (.setCursor editor))
 
-     (cm/set-zipper! editor post-zipper))))
+     (cm/set-zipper! editor formatted-zipper))))
 
 (def other-bracket {\( \) \[ \] \{ \} \" \"})
 (defn spaces [n] (apply str (take n (repeat " "))))
@@ -83,7 +85,7 @@
   [{{:keys [pos loc]} :magic/cursor} side]
   (let [move (case side :left nav/left-up
                         :right nav/right-up)
-        nodes (->> (iterate move (nav/include-prefix-parents loc))
+        nodes (->> (iterate move loc #_(nav/include-prefix-parents loc))
                    (take-while identity)
                    (map z/node)
                    (filter (fn [node]
@@ -203,7 +205,7 @@
   true)
 
 (range/within? {:line 0, :column 1, :end-line 0, :end-column 22}
-              {:line 0, :column 13})
+               {:line 0, :column 13})
 
 (def kill!
   (fn [{{pos :pos} :magic/cursor

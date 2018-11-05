@@ -61,10 +61,10 @@
                           (update out (dec (count out)) (fn [base]
                                                           (-> base
                                                               (update :children conj node)
-                                                              (update :source str (get node :source)))))
+                                                              (update :string str (get node :string)))))
                           (conj out (-> (rd/EmptyNode :base)
                                         (assoc :children [node]
-                                               :source (get node :source))))))))
+                                               :string (get node :string))))))))
                   [])))))
 
 (defn shape [{:keys [tag children] :as node}]

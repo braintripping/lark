@@ -311,7 +311,7 @@
 
 (defn update-ast!
   [{{:as ast
-     ast-source :source} :ast :as editor}]
+     ast-source :string} :ast :as editor}]
   (let [value (.getValue editor)]
     (when (or (nil? ast-source)
               (not= ast-source value))

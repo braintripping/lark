@@ -22,20 +22,19 @@
   (every-pred (complement comment?)
               (complement whitespace?)))
 
-(defn terminal-node? [node]
+(defn terminal-node? [^rd/Node node]
   (let [tag (.-tag node)]
-    (and (not (perf/keyword-in? [:list :vector :map] tag))
-         (perf/keyword-in? [:space
-                                            :symbol
-                                            :keyword
-                                            :token
-                                            :string
-                                            :number
-                                            :newline
-                                            :comma
-                                            :comment
-                                            :comment-block
-                                            :unmatched-delimiter] tag))))
+    (perf/keyword-in? [:space
+                       :symbol
+                       :keyword
+                       :token
+                       :string
+                       :number
+                       :newline
+                       :comma
+                       :comment
+                       :comment-block
+                       :unmatched-delimiter] tag)))
 
 (def may-contain-children? (complement terminal-node?))
 

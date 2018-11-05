@@ -2,7 +2,8 @@
   (:require [lark.tree.parse :as parse]
             [lark.tree.emit :as emit]
             [lark.tree.node :as n]
-            [lark.tree.format :as format]))
+            [lark.tree.format :as format]
+            [fast-zip.core :as z]))
 
 ;; Parse
 
@@ -17,31 +18,44 @@
   (comp ast-zip parse/ast))
 
 ;; Navigation
-(defn format [x]
-  (let [x (cond-> x
-                  (string? x) (parse/ast))]
-    (binding [format/*pretty* true]
-      (emit/string x))))
-
 (comment
+ (defn format-old [x]
+   (let [x (cond-> x
+                   (string? x) (parse/ast))]
+     (binding [format/*pretty* true]
+       (emit/string-old x)))))
 
- (let [sample-code-string ""]
-   (let [_ (.profile js/console "parse-ast")
-         ast (do (dotimes [n 4]
-                   (parse/ast sample-code-string))
-                 (time (parse/ast sample-code-string)))
-         _ (.profileEnd js/console)
+(defn format-zip [loc]
+  {:pre [(= (type loc) z/ZipperLocation)]}
+  (-> loc
+      (format/format-zip)
+      (emit/zip)))
 
-         _ (.profile js/console "emit-string")
-         str (do (dotimes [n 4]
-                   (emit/string ast))
-                 (time (emit/string ast)))
-         _ (.profileEnd js/console)
+(defn format-string [s]
+  {:pre [(string? s)]}
+  (-> (string-zip s)
+      (format-zip)
+      .-node
+      :string))
 
-         _ (.profile js/console "emit-formatted-string")
-         formatted-str (do (dotimes [n 4]
-                             (format ast))
-                           (time (format ast)))
-         _ (.profileEnd js/console)]
-     (println :cljs-core-string-verify (= str sample-code-string)))))
+#_(do
 
+  (let [s ""]
+    (let [_ (prn :parse-dirty-string)
+          ast (do #_(dotimes [n 4]
+                      (parse/ast s))
+                (time (parse/ast s)))
+
+          _ (prn :emit-dirty-string)
+          _ (do #_(dotimes [n 4]
+                      (emit/string ast))
+                (time (emit/string ast)))
+
+          _ (prn :format-dirty-string-new)
+          _ (simple-benchmark [] (format-string s) 1)
+
+          s (format-string s)
+
+          _ (prn :format-clean-string-new)
+          _ (simple-benchmark [] (format-string s) 1)]
+      (println :cljs-core-string-verify (= str s)))))
