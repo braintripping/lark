@@ -11,6 +11,13 @@
 (def ^:dynamic *invalid-nodes* nil)
 (def ^:dynamic *active-cursor-node* nil)
 
+(defn active-cursor-line? [line]
+  (= line (some-> *active-cursor-node* :line)))
+
+(defn active-cursor-node? [node]
+  (when node
+    (= node *active-cursor-node*)))
+
 (def ^:dynamic *delimiter* (list))
 
 (def peek r/peek-char)

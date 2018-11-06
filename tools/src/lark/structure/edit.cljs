@@ -30,13 +30,11 @@
          formatted-zipper (binding [r/*active-cursor-node* (some-> cursor-loc
                                                                    (z/node))]
                             (tree/format-zip zipper))
-         formatted-source (-> formatted-zipper
-                              .-node
-                              :string)]
+         formatted-source (:string (z/node formatted-zipper))]
 
      (when (not= source formatted-source)                   ;; only mutate editor if value has changed
        (.setValue editor formatted-source))
-     (prn :path (cursor/path zipper pos cursor-loc))
+
      (->> (cursor/path zipper pos cursor-loc)               ;; cursor path from pre-format zipper, ignoring whitespace
           (cursor/position formatted-zipper)                ;; returns position in post-format zipper for path
           (cm/range->Pos)

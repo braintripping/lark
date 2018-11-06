@@ -114,3 +114,12 @@
                                            (not threading?)) 0
                                       :else 1))))))))))
 
+(defn pad-chars?
+  "Returns true if space should be left inbetween characters c1 and c2."
+  [c1 c2]
+  (if (or (rd/close-bracket? c2)
+          (rd/open-bracket? c1)
+          (rd/prefix-boundary? c1)
+          (identical? \# c1))
+    false
+    true))

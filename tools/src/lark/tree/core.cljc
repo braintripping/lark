@@ -17,24 +17,18 @@
   "Given ClojureScript source, returns zipper"
   (comp ast-zip parse/ast))
 
-;; Navigation
-(comment
- (defn format-old [x]
-   (let [x (cond-> x
-                   (string? x) (parse/ast))]
-     (binding [format/*pretty* true]
-       (emit/string-old x)))))
-
 (defn format-zip [loc]
   {:pre [(= (type loc) z/ZipperLocation)]}
-  (-> loc
-      z/node
-      emit/materialize
-      n/ast-zip))
+  (binding [format/*pretty* true]
+    (-> loc
+        z/node
+        emit/materialize
+        n/ast-zip)))
 
 (defn format-string [s]
   {:pre [(string? s)]}
-  (:string (ast s)))
+  (binding [format/*pretty* true]
+    (:string (ast s))))
 
 #_(do
 

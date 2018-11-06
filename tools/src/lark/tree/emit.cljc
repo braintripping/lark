@@ -66,7 +66,6 @@
                    out value))))) [] forms))
 
 (declare materialize)
-(def ^:dynamic *position* nil)
 
 (defn- with-string [line column node string]
   [line (+ column (.-length string)) (assoc node :string string)])
@@ -144,29 +143,29 @@
       (let [operator (first siblings)]
         (if-not (perf/!keyword-identical? :token (some-> operator .-tag))
           inner-column
-          (let [indent-type (format/indentation-for (name (.-value operator)))]
-            (if (perf/!keyword-identical? :indent indent-type)
-              (+ inner-column 1)
-              (let [indent-offset (-> indent-type
-                                      (cond-> threading-form (dec)))
-                    split-after (+ 2 indent-offset)
-                    [exact? taken _ num-passed] (->> (cond-> siblings
-                                                             (n/whitespace? operator) (format/butlast-vec))
-                                                     (rd/split-after-n split-after
-                                                                       n/sexp?
-                                                                       (fn [node]
-                                                                         (perf/!keyword-identical? :newline (.-tag node)))))]
-                (cond exact? (:column (last taken))
-                      (and (identical? num-passed 1)
-                           (not threading-form)) inner-column
-                      :else (inc inner-column))))))))))
+          (max inner-column
+               (let [indent-type (format/indentation-for (name (.-value operator)))]
+                 (if (perf/!keyword-identical? :indent indent-type)
+                   (+ inner-column 1)
+                   (let [indent-offset (-> indent-type
+                                           (cond-> threading-form (dec)))
+                         split-after (+ 2 indent-offset)
+                         [exact? taken _ num-passed] (->> (cond-> siblings
+                                                                  (n/whitespace? operator) (format/butlast-vec))
+                                                          (rd/split-after-n split-after
+                                                                            n/sexp?
+                                                                            (fn [node]
+                                                                              (perf/!keyword-identical? :newline (.-tag node)))))]
+                     (cond exact? (:column (last taken))
+                           (and (identical? num-passed 1)
+                                (not threading-form)) inner-column
+                           :else (inc inner-column)))))))))))
 
 (defn materialize
   "Emit ClojureScript string from a magic-tree AST"
   ([node]
-   (binding [*position* (volatile! [0 0])]
-     (let [[line column node] (materialize 0 0 node nil nil nil)]
-       node)))
+   (let [[line column node] (materialize 0 0 node nil nil nil)]
+     node))
   ([line column node opts i siblings]
    (let [tag (.-tag node)
          value (.-value node)
@@ -175,14 +174,16 @@
                 (case tag
                   :token (with-string line column node value)
 
-                  :space (if format/*pretty*
+                  :space (if (and format/*pretty*
+                                  (not (rd/active-cursor-line? line)))
                            (when (emit-space? node i siblings)
                              (with-string line column node " "))
                            (with-string line column node value))
 
                   (:list :vector :map) (with-children*)
 
-                  :newline (if format/*pretty*
+                  :newline (if (and format/*pretty*
+                                    (not (rd/active-cursor-node? node)))
                              (let [indent (body-indent (get opts :parent) siblings (get opts :threading-form))]
                                [(inc line) indent (assoc node :string (str \newline (format/spaces indent)))])
                              [(inc line) (dec (.-length value)) (assoc node :string value)])
