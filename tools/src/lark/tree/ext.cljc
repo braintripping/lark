@@ -51,7 +51,8 @@
                       (case target
                         :comment-block
                         (if (= :comment-block prev-tag)
-                          (update-in out [(dec (count out)) :value] str (-> (emit/string node)
+                          (update-in out [(dec (count out)) :value] str (-> (emit/materialize node)
+                                                                            :string
                                                                             (normalize-comment-line)))
                           (conj out (assoc node
                                       :tag :comment-block

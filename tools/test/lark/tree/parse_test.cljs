@@ -17,11 +17,11 @@
     (testing "parse and emit"
 
       (are [string res-sexp]
-        (let [tree (parse/ast string)]
+        (let [ast (parse/ast string)]
           (when res-sexp
-            (is (= res-sexp (emit/sexp tree))
+            (is (= res-sexp (emit/sexp ast))
                 (str "Emit sexp for: " (subs string 0 30))))
-          (is (= string (emit/string tree)))
+          (is (= string (:string ast)))
           (str "Emit string for: " string))
 
         "1" '[1]
@@ -58,15 +58,13 @@
         "my:symbol" '[my:symbol])
 
       (let [regexp-string "#\"[a-z]\""
-            tree (parse/ast "#\"[a-z]\"")]
-        (is (regexp? (-> tree
+            ast (parse/ast "#\"[a-z]\"")]
+        (is (regexp? (-> ast
                          (emit/sexp)
                          (first)))
             "Regular expression is returned from regex string. (Can't test equality, regex's are never equal.)")
-        (is (= regexp-string (emit/string tree))
-            "Regexp returns same string"))
-
-      )
+        (is (= regexp-string (:string ast))
+            "Regexp returns same string")))
 
     (are [in-string the-shape]
       (is (= (shape (-> (parse/ast in-string)
@@ -112,7 +110,11 @@
       (binding [emit/*print-selections* true]
         (let [ast (parse/ast "(+ 1 2 3)")
               root (tree/ast-zip ast)
-              root-string (comp emit/string z/root)
+              root-string (fn [loc]
+                            (-> loc
+                                z/root
+                                emit/materialize
+                                :string))
               cursor (rd/EmptyNode :cursor)
               select-rights (fn [loc n]
                               (let [[contents num] (loop [rights (z/rights loc)

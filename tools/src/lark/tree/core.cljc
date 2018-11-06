@@ -18,25 +18,23 @@
   (comp ast-zip parse/ast))
 
 ;; Navigation
-
-(defn format-old [x]
-  (let [x (cond-> x
-                  (string? x) (parse/ast))]
-    (binding [format/*pretty* true]
-      (emit/string-old x))))
+(comment
+ (defn format-old [x]
+   (let [x (cond-> x
+                   (string? x) (parse/ast))]
+     (binding [format/*pretty* true]
+       (emit/string-old x)))))
 
 (defn format-zip [loc]
   {:pre [(= (type loc) z/ZipperLocation)]}
   (-> loc
-      (format/format-zip)
-      (emit/zip)))
+      z/node
+      emit/materialize
+      n/ast-zip))
 
 (defn format-string [s]
   {:pre [(string? s)]}
-  (-> (string-zip s)
-      (format-zip)
-      .-node
-      :string))
+  (:string (ast s)))
 
 #_(do
 

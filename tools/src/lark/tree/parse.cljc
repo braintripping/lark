@@ -4,6 +4,7 @@
 (ns lark.tree.parse
   (:require [lark.tree.reader :as rd]
             [lark.tree.emit :as emit]
+            [lark.tree.format]
             [cljs.tools.reader.impl.commons :refer [parse-symbol]]
             [chia.util.perf :as perf]
             [lark.tree.util :as util]
@@ -305,36 +306,14 @@
 
 (defn ast
   [s]
-  (binding [rd/*invalid-nodes* (volatile! [])]
-    (let [reader (indexing-reader s)
-          base (rd/conj-children (rd/->Node :base nil nil nil nil nil)
-                                 reader
-                                 {:read-fn parse-next})
-          base (rd/assoc-range! base [0 0
-                                      (dec (.-line reader))
-                                      (dec (.-column reader))
-                                      0 (.-length s)])]
-      (let [[source children]
-            (reduce (fn [[source values] {:as node
-                                          :keys [offset end-offset]}]
-                      (let [node-str (subs s offset end-offset)]
-                        [(str source node-str)
-                         (conj values (assoc node :string node-str))]))
-                    ["" []] (.-children base))]
-        (assoc base
-          :string source
-          :children children
-          :invalid-nodes (util/guard-> @rd/*invalid-nodes*
-                                       (comp not empty?)))))))
-
-(defn ast-new
-  [s]
   (binding [rd/*invalid-nodes* (volatile! [])
             rd/*with-position* false]
     (let [reader (indexing-reader s)
           base (rd/conj-children (rd/->Node :base nil nil nil nil nil)
                                  reader
                                  {:read-fn parse-next})]
-      (assoc base
-        :invalid-nodes (util/guard-> @rd/*invalid-nodes*
-                                     (comp not empty?))))))
+      (-> base
+          (assoc :invalid-nodes
+                 (util/guard-> @rd/*invalid-nodes*
+                               (comp not empty?)))
+          (emit/materialize)))))

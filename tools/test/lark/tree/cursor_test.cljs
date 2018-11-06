@@ -76,6 +76,7 @@
                  :in-path path
                  :in-sexp sexp})))))
 
+
 (deftest formatting-with-cursors
   (doall (for [[in-str expected-sexp expected-sticky expected-str-with-cursor]
                '[["( ( ( a b | ) ) )" (a b) :inner-right "(((a b|)))"]
@@ -105,15 +106,14 @@
                      target-loc (nav/get-loc zipper target-path)
                      target-sexp (some-> target-loc z/node emit/sexp)
                      #_#__ (pp/pprint {:original-node (z/node target-loc)
-                                   :original-range (range/bounds (z/node target-loc))})
+                                       :original-range (range/bounds (z/node target-loc))})
 
                      ;; format the code and put in a new editor
-
-                     formatted-zipper (-> (.getValue editor)
-                                          (tree/string-zip)
-                                          (tree/format-zip))
+                     formatted-zipper (binding [format/*pretty* true]
+                                        (-> (tree/ast (.getValue editor))
+                                            (tree/ast-zip)))
                      formatted-str (-> formatted-zipper
-                                       .-node
+                                       z/node
                                        :string)
                      formatted-editor (doto editor
                                         (.setValue formatted-str))
@@ -121,8 +121,8 @@
                      ;; resolve loc in formatted zipper
                      found-loc (nav/get-loc formatted-zipper target-path)
                      found-sexp (some-> found-loc
-                                        (z/node)
-                                        (emit/sexp))
+                                        z/node
+                                        emit/sexp)
 
                      ;; putting cursor back into formatted editor
                      found-cursor-position (cursor/position formatted-zipper cursor-path) #_(try (cursor/position formatted-zipper cursor-path)
