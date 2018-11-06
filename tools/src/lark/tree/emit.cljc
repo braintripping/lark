@@ -66,6 +66,7 @@
                    out value))))) [] forms))
 
 (declare materialize)
+(def ^:dynamic *position* nil)
 
 (defn- with-string [line column node string]
   [line (+ column (.-length string)) (assoc node :string string)])
@@ -163,82 +164,73 @@
 (defn materialize
   "Emit ClojureScript string from a magic-tree AST"
   ([node]
-   (let [[line column node] (materialize 0 0 node nil nil nil)]
-     node))
+   (binding [*position* (volatile! [0 0])]
+     (let [[line column node] (materialize 0 0 node nil nil nil)]
+       node)))
   ([line column node opts i siblings]
    (let [tag (.-tag node)
-         ;_ (vswap! format/hist update tag inc)
          value (.-value node)
-         with-children* #(with-children line column opts node (rd/edges tag))
-         [end-line end-column node :as result]
-         (perf/!condentical-keyword tag
-           :token (with-string line column node value)
+         with-children* #(with-children line column opts node (rd/edges tag))]
+     (when-let [[end-line end-column node]
+                (case tag
+                  :token (with-string line column node value)
 
-           :space (if format/*pretty*
-                    (when (emit-space? node i siblings)
-                      (with-string line column node " "))
-                    (with-string line column node value))
+                  :space (if format/*pretty*
+                           (when (emit-space? node i siblings)
+                             (with-string line column node " "))
+                           (with-string line column node value))
 
-           (:list :vector :map) (with-children*)
+                  (:list :vector :map) (with-children*)
 
-           :newline (if format/*pretty*
-                      (let [indent (body-indent (get opts :parent) siblings (get opts :threading-form))]
-                        [(inc line) indent (assoc node :string (str \newline (format/spaces indent)))])
-                      [(inc line) (dec (.-length value)) (assoc node :string value)])
+                  :newline (if format/*pretty*
+                             (let [indent (body-indent (get opts :parent) siblings (get opts :threading-form))]
+                               [(inc line) indent (assoc node :string (str \newline (format/spaces indent)))])
+                             [(inc line) (dec (.-length value)) (assoc node :string value)])
+                  :number (with-string line column node value)
+                  :string (with-string-multiline line column node (str "\"" value "\""))
+                  :keyword (with-string line column node (str (if (:resolve-ns? (.-options node)) "::" ":")
+                                                              (some-> (namespace value) (str "/"))
+                                                              (name value)))
+                  :error nil
 
-           (case tag
-             :number (with-string line column node value)
-             :string (with-string-multiline line column node (str "\"" value "\""))
-             :keyword (with-string line column node (str (if (:resolve-ns? (.-options node)) "::" ":")
-                                                         (some-> (namespace value) (str "/"))
-                                                         (name value)))
-             :error nil
+                  (:symbol
+                   :comma
+                   :unmatched-delimiter) (with-string line column node value)
 
-             (:symbol
-              :comma
-              :token
-              :space
-              :unmatched-delimiter) (with-string line column node value)
+                  :comment (with-string line column node (str \; value))
 
-             :comment (with-string line column node (str \; value))
+                  :comment-block (with-string-multiline line column node (str/join (sequence (comp (map #(if (.test #"^\s*$" %)
+                                                                                                           %
+                                                                                                           (str ";; " %)))
+                                                                                                   (interpose "\n"))
+                                                                                             (str/split-lines value))))
 
-             :comment-block (with-string-multiline line column node (str/join (sequence (comp (map #(if (.test #"^\s*$" %)
-                                                                                                      %
-                                                                                                      (str ";; " %)))
-                                                                                              (interpose "\n"))
-                                                                                        (str/split-lines value))))
+                  :cursor (when *print-selections*
+                            (with-string line column node "|"))
 
-             :cursor (when *print-selections*
-                       (with-string line column node "|"))
+                  :selection (when *print-selections*
+                               (with-children*))
 
-             :selection (when *print-selections*
-                          (with-children*))
+                  ;:space moved above
+                  (:base
 
-             ;:space moved above
-             (:base
-              :list
-              :vector
-              :map
-
-              :deref
-              :fn
-              :quote
-              :reader-macro
-              :reader-conditional
-              :reader-conditional-splice
-              :set
-              :syntax-quote
-              :uneval
-              :unquote
-              :unquote-splicing
-              :var
-              :regex
-              :meta
-              :reader-meta) (with-children*)
-             :namespaced-map (with-children line column opts node [(get (.-options node) :prefix)])
-
-             nil nil))]
-     (when result
+                   :deref
+                   :fn
+                   :quote
+                   :reader-macro
+                   :reader-conditional
+                   :reader-conditional-splice
+                   :set
+                   :syntax-quote
+                   :uneval
+                   :unquote
+                   :unquote-splicing
+                   :var
+                   :regex
+                   :meta
+                   :reader-meta) (with-children*)
+                  :namespaced-map (with-children line column opts node [(get (.-options node) :prefix)])
+                  nil)]
        [end-line end-column
         (assoc node :range [line column end-line end-column])]))))
 

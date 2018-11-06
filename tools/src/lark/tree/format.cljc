@@ -114,9 +114,3 @@
                                            (not threading?)) 0
                                       :else 1))))))))))
 
-(def hist (volatile! {}))
-(js/setTimeout #(->> @hist
-                     (seq)
-                     (sort-by second)
-                     (reverse)
-                     (pp/pprint)) 1000)

@@ -19,17 +19,13 @@
 
 (declare parse-next)
 
-(defn boundary? [x]
-  (or (rd/whitespace? x)
-      (rd/boundary? x)))
-
 (defn read-to-char-boundary
   [reader]
   (let [c (r/read-char reader)]
     (str c
          (if (identical? c \\)
            ""
-           (rd/read-until reader boundary?)))))
+           (rd/read-until reader rd/boundary?)))))
 
 (defn dispatch
   [c]
@@ -119,7 +115,6 @@
               :token
               :number)]
     (rd/ValueNode tag token)
-    ;; TODO
     ;; is it important to detect invalid tokens?
     #_(try (let [[tag value] (let [value (edn/read-string token)]
                                (if (symbol? value) [:symbol value]

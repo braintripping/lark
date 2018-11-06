@@ -25,12 +25,14 @@
 
 (defn edges [tag]
   (case tag
+    :list [\( \)]
+    :vector [\[ \]]
+    :meta ["^"]
+
+    :map [\{ \}]
     :comment [";"]
     :deref ["@"]
-    :list [\( \)]
     :fn ["#"]
-    :map [\{ \}]
-    :meta ["^"]
     :quote ["'"]
     :reader-meta ["#^"]
     :raw-meta ["^"]
@@ -43,7 +45,6 @@
     :unquote-splicing ["~@"]
     :uneval ["#_"]
     :var ["#'"]
-    :vector [\[ \]]
     :reader-conditional ["#?"]
     :reader-conditional-splice ["#?@"]
     :selection [\‹ \›]
@@ -54,11 +55,7 @@
    [:space :newline :tab :comma :cursor :selection]
    tag))
 
-(defn close-bracket? [ch]
-  (perf/identical-in? [\) \] \}] ch))
 
-(defn open-bracket? [ch]
-  (perf/identical-in? [\( \[ \{] ch))
 
 (defn throw-reader
   "Throw reader exception, including line/column."
@@ -484,39 +481,47 @@
 (def non-breaking-space \u00A0)
 
 (defn newline?
-  [c]
+  [ch]
   (perf/identical-in? [\newline
                        \return]
-                      c))
+                      ch))
 
 (defn space?
-  [c]
+  [ch]
   (perf/identical-in? [\space
                        \tab
                        non-breaking-space]
-                      c))
+                      ch))
 
 (defn whitespace?
-  [c]
-  (perf/identical-in? [\,
-                       \space
+  [ch]
+  (perf/identical-in? [\space
+                       \,
                        \newline
                        \tab
                        non-breaking-space
                        \return]
-                      c))
-
-(defn brace? [ch]
-  (perf/identical-in? [\( \) \[ \] \{ \} \"]
                       ch))
 
+(defn close-bracket? [ch]
+  (perf/identical-in? [\) \] \}] ch))
+
+(defn open-bracket? [ch]
+  (perf/identical-in? [\( \[ \{] ch))
+
+(defn brace? [ch]
+  (or (close-bracket? ch)
+      (open-bracket? ch)
+      (identical? "\"" ch)))
+
 (defn prefix-boundary? [ch]
+
   (perf/identical-in? [\; \: \' \@ \^ \` \~ \\ nil]
                       ch))
 
-(defn boundary? [ch]
-  (or (brace? ch)
-      (prefix-boundary? ch)))
 
-(defn get-line [^Node node]
-  (-> node .-range (nth 0)))
+
+(defn boundary? [ch]
+  (or (whitespace? ch)
+      (brace? ch)
+      (prefix-boundary? ch)))

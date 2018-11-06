@@ -13,7 +13,7 @@
                                :http-port 8041
                                :http-handler shadow.http.push-state/handle}}
           :test {:target :browser-test
-                 ;:ns-regexp "format-test$"
+                 :ns-regexp "format-test$"
                  :test-dir "public/test"
                  :release {:compiler-options {:optimizations :simple}}
                  :devtools {:http-port 8021
