@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [peek next])
   (:require
    [lark.tree.util :as util]
+   [clojure.pprint :as pp]
    [chia.util.perf :as perf]
    #?@(:cljs [[cljs.tools.reader.reader-types :as r]
               [chia.util.js-interop :as j]]
@@ -126,13 +127,14 @@
                ^:mutable options
                ^:mutable range
                ^:mutable value
-               ^:mutable children]
+               ^:mutable children
+               ^:mutable string]
 
   ;; ------------- Add child nodes via `append` --------------
 
   IAppend
   (append [coll o]
-    (Node. tag options range value (conj children o)))
+    (Node. tag options range value (conj children o) nil))
 
   ;; ------------- Position information stored via `meta` --------------
 
@@ -147,18 +149,18 @@
   (-equiv [o other]
    ;; position not taken into account
     (and (some? other)
-         (keyword-identical? tag (.-tag other))
-         (= value (.-value other))
+         (perf/!keyword-identical? tag (.-tag other))
          (= range (.-range other))
-         (= children (.-children other))
-         (= options (.-options other))))
+         (= options (.-options other))
+         (= value (.-value other))
+         (= children (.-children other))))
 
   ;; ------------- Comparison by range --------------
 
   IComparable
   (-compare [x y]
     (let [l (- (-lookup x :line) (-lookup y :line))]
-      (if (not= l 0)
+      (if (not (identical? l 0))
         l
         (- (-lookup x :column) (-lookup y :column)))))
 
@@ -174,17 +176,21 @@
               :value (some? value)
               :children (some? children)
               :range (some? range)
+              :string (some? string)
               (contains? options key)))
   (-assoc [this k VAL]
     (case k
-      :tag (Node. VAL options range value children)
-      :options (Node. tag VAL range value children)
-      :value (Node. tag options range VAL children)
-      :children (Node. tag options range value VAL)
-      :range (Node. tag options VAL value children)
-      :line (Node. tag options (assoc range 0 VAL) value children)
-      :column (Node. tag options (assoc range 1 VAL) value children)
-      (Node. tag (assoc options k VAL) range value children)))
+      :tag (Node. VAL options range value children string)
+      :options (Node. tag VAL range value children string)
+      :value (Node. tag options range VAL children string)
+      :children (Node. tag options range value VAL string)
+      :string (Node. tag options range value children VAL)
+      :range (Node. tag options VAL value children string)
+      :line (Node. tag options (assoc range 0 VAL) value children string)
+      :column (Node. tag options (assoc range 1 VAL) value children string)
+      :end-line (Node. tag options (assoc range 2 VAL) value children string)
+      :end-column (Node. tag options (assoc range 3 VAL) value children string)
+      (Node. tag (assoc options k VAL) range value children string)))
 
   ITransientAssociative
   (-assoc! [this k val]
@@ -193,6 +199,7 @@
       :value (set! value val)
       :children (set! children val)
       :range (set! range val)
+      :string (set! string val)
       :options (set! options val))
     this)
 
@@ -212,16 +219,15 @@
               :value value
               :children children
               :range range
+              :string string
               :line (nth range 0)
               :column (nth range 1)
-              :end-line (+ (nth range 0) (nth range 2))
-              :end-column (+ (nth range 1) (nth range 3))
+              :end-line (nth range 2)
+              :end-column (nth range 3)
               :offset (nth range 4)
               :end-offset (nth range 5)
               :options options
 
-              ;; todo
-              ;; see if we should keep this
               :start {:line (nth range 0)
                       :column (nth range 1)}
               :end {:line (+ (nth range 0) (nth range 2))
@@ -235,10 +241,10 @@
   (-pr-writer [o writer _]
     (let [options (dissoc options :string :invalid-nodes :cursor)]
       (-write writer (str (cond-> [tag]
-                                  range (conj (subvec range 0 4))
+                                  range (conj range)
                                   (seq options) (conj options)
-                                  (string? value) (conj (subs value 0 10))
-                                  children (conj children)) ">")))))
+                                  (not (seq children)) (conj (subs (str value) 0 10))
+                                  children (conj (str "..." (count children)))) ">")))))
 
 (defn delimiter-error [tag reader]
   (let [[line col] (position reader)]
@@ -246,11 +252,13 @@
                    :expected (first *delimiter*)} [line
                                                    col
                                                    line
-                                                   (inc col)] nil nil)))
+                                                   (inc col)] nil nil nil)))
 
 (defn current-pos [reader]
   [(dec (.-line reader))
    (dec (.-column reader))])
+
+(def ^:dynamic *with-position* true)
 
 (defn read-with-position
   "Use the given function to read value, then attach row/col metadata."
@@ -259,18 +267,17 @@
         start-column (dec (.-column reader))
         start-offset (current-offset reader)]
     (when-let [node (read-fn reader)]
-      (assoc-range!
-       node
-       [start-line
-        start-column
+      (cond-> node
+              *with-position*
+              (assoc-range!
+               [start-line
+                start-column
 
-        (- (dec (.-line reader))
-           start-line)
-        (- (dec (.-column reader))
-           start-column)
+                (dec (.-line reader))
+                (dec (.-column reader))
 
-        start-offset
-        (current-offset reader)]))))
+                start-offset
+                (current-offset reader)])))))
 
 (defn report-invalid! [node]
   (let [node (assoc node :invalid? true)]
@@ -283,22 +290,22 @@
   ([tag value position]
    (report-invalid!
     (->Node :token {:invalid? true
-                    :info {:tag tag}} position value nil))))
+                    :info {:tag tag}} position value nil nil))))
 
 (defn Splice
   ([children]
-   (->Node :splice nil nil nil children))
+   (->Node :splice nil nil nil children nil))
   ([node children]
    (Splice (into [node] children))))
 
 (defn CollectionNode [tag nodes]
-  (->Node tag nil nil nil nodes))
+  (->Node tag nil nil nil nodes nil))
 
 (defn ValueNode [tag value]
-  (->Node tag nil nil value nil))
+  (->Node tag nil nil value nil nil))
 
 (defn EmptyNode [tag]
-  (->Node tag nil nil nil nil))
+  (->Node tag nil nil nil nil nil))
 
 (defn split-after-n
   "Splits after `n` values which pass `pred`.
@@ -444,7 +451,7 @@
                 (invalid-exit coll-node reader out)
 
                 :matched-delimiter
-                (if (and take-n (not= take-n i))
+                (if (and take-n (not (identical? take-n i)))
                   (do (unread reader value)
                       (invalid-exit coll-node reader out))
                   (valid-exit coll-node out))

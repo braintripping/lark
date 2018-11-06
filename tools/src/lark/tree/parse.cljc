@@ -186,7 +186,7 @@
                                  resolve-ns? (str ":")))
       (rd/->Node :keyword
                  (when resolve-ns?
-                   {:resolve-ns? resolve-ns?}) nil expr nil))))
+                   {:resolve-ns? resolve-ns?}) nil expr nil nil))))
 
 (defn parse-sharp
   [reader]
@@ -307,7 +307,7 @@
   [s]
   (binding [rd/*invalid-nodes* (volatile! [])]
     (let [reader (indexing-reader s)
-          base (rd/conj-children (rd/->Node :base nil nil nil nil)
+          base (rd/conj-children (rd/->Node :base nil nil nil nil nil)
                                  reader
                                  {:read-fn parse-next})
           base (rd/assoc-range! base [0 0
@@ -326,3 +326,15 @@
           :children children
           :invalid-nodes (util/guard-> @rd/*invalid-nodes*
                                        (comp not empty?)))))))
+
+(defn ast-new
+  [s]
+  (binding [rd/*invalid-nodes* (volatile! [])
+            rd/*with-position* false]
+    (let [reader (indexing-reader s)
+          base (rd/conj-children (rd/->Node :base nil nil nil nil nil)
+                                 reader
+                                 {:read-fn parse-next})]
+      (assoc base
+        :invalid-nodes (util/guard-> @rd/*invalid-nodes*
+                                     (comp not empty?))))))

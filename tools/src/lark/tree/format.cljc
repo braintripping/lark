@@ -4,9 +4,7 @@
             [lark.tree.node :as n]
             [lark.tree.nav :as nav]
             [fast-zip.core :as z]
-            [chia.util.perf :as perf]
-            [lark.tree.emit :as emit]
-            [cljs.pprint :as pp]))
+            [chia.util.perf :as perf]))
 
 (def ^:dynamic *pretty* false)
 
@@ -16,6 +14,14 @@
   (if (< n 500)
     (subs SPACES 0 n)
     (str/join (take n (repeat " ")))))
+
+(defn count-lines [^string s]
+  (loop [i -1
+         found 0]
+    (let [i (.indexOf s "\n" (inc i))]
+      (if (identical? i -1)
+        found
+        (recur i (inc found))))))
 
 (defn last-line-length [s]
   (let [last-line-start (.lastIndexOf s \newline)]
@@ -117,6 +123,28 @@
     false
     true))
 
+(defn split-after-n
+  "Splits after `n` values which pass `pred`.
+
+  Returns vector of the form
+  [<took-n-values?> <taken-values> <remaining-values>]"
+  [n pred stop? coll]
+  (let [end (count coll)]
+    (loop [i 0
+           counted 0
+           taken nil]
+      (cond (identical? counted n) [true taken (subvec coll i) counted]
+            (identical? i end) [false taken [] counted]
+            :else
+            (let [next-item (nth coll i)]
+              (if (and (some? stop?)
+                       (stop? next-item))
+                [false taken (subvec coll i) counted]
+                (recur (inc i)
+                       (cond-> counted
+                               (pred next-item) (inc))
+                       next-item)))))))
+
 (defn get-body-indent*
   [node threading?]
   (let [tag (.-tag node)
@@ -139,7 +167,7 @@
                     split-after (+ 2 indent-offset)
                     [exact? taken _ num-passed] (->> (cond-> children
                                                              (n/whitespace? operator) (butlast-vec))
-                                                     (rd/split-after-n split-after
+                                                     (split-after-n split-after
                                                                        n/sexp?
                                                                        (fn [node]
                                                                          (perf/identical? :newline (.-tag node)))))]
@@ -247,3 +275,5 @@
                  next-inner-delta
                  next-indent
                  (inc i)))))))
+
+

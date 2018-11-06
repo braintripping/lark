@@ -37,6 +37,14 @@
         (recur next-loc (conj! out next-loc))
         (persistent! out)))))
 
+(defn iteratev-nav [nav f start-loc]
+  (when start-loc
+    (loop [loc start-loc
+           out (transient [start-loc])]
+      (if-let [next-loc (nav loc)]
+        (recur next-loc (conj! out (f next-loc)))
+        (persistent! out)))))
+
 (defn child-locs [loc]
   (iteratev-while z/right (z/down loc)))
 
