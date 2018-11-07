@@ -163,8 +163,10 @@
 (defn materialize
   "Emit ClojureScript string from a magic-tree AST"
   ([node]
-   (let [[line column node] (materialize 0 0 node nil nil nil)]
-     node))
+   (binding [format/*cursor* (volatile! nil)]
+     (let [[line column node] (materialize 0 0 node nil nil nil)]
+       (assoc node
+         :ast/cursor-pos @format/*cursor*))))
   ([node {:as opts
           :keys [format]}]
    (binding [format/*pretty* (boolean format)]
@@ -182,7 +184,7 @@
                            (with-string line column node value))
 
                   :newline (if (and format/*pretty*
-                                    (not (rd/active-cursor-node? node)))
+                                    (not (rd/active-cursor-line? (inc line))))
                              (let [indent (format/body-indent opts prev-siblings)]
                                [(inc line) indent (assoc node :string (str \newline (format/spaces indent)))])
                              [(inc line) (dec (.-length value)) (assoc node :string value)])
@@ -206,8 +208,11 @@
                                                                                                    (interpose "\n"))
                                                                                              (str/split-lines value))))
 
-                  :cursor (when *print-selections*
-                            (with-string line column node "|"))
+                  :cursor (do (vreset! format/*cursor*
+                                       {:line line
+                                        :column column})
+                               (when *print-selections*
+                                (with-string line column node "|")))
 
                   :selection (when *print-selections*
                                (with-children*))

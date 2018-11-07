@@ -4,7 +4,8 @@
             [lark.tree.node :as n]
             [lark.tree.reader :as rd]
             [lark.tree.range :as range]
-            [chia.util.perf :as perf]))
+            [chia.util.perf :as perf]
+            [chia.util :as u]))
 
 #_(defn prefix-is-integral [tag]
     (perf/keyword-in? [:set
@@ -186,3 +187,14 @@
   (let [^z/ZipperPath path (.-path loc)]
     (some-> (and path (.-pnodes path))
             (peek))))
+
+(defn prev-whitespace-loc [pos loc]
+  (->> [loc (z/left loc)]
+       (sequence (comp (keep identity)
+                       (filter (comp n/whitespace? z/node))
+                       (remove #(range/at-start? pos (z/node %)))))
+       (first)))
+
+(defn prev-whitespace-node [pos loc]
+  (some-> (prev-whitespace-loc pos loc)
+          (z/node)))

@@ -20,7 +20,7 @@
                 (catch js/Error e
                   (js/console.log (.-stack e))))))
 
-#?(:cljs (do
+#?(:cljs (comment
            (def hist (volatile! {}))
            (defn hist-count! [label x true?]
              (when true? (vswap! hist update [label x] inc))

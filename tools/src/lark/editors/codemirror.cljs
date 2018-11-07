@@ -226,17 +226,7 @@
     (range/inner-range node)
     node))
 
-(defn at-end? [pos node]
-  (= (range/bounds pos :left)
-     (range/bounds node :right)))
 
-(defn at-start? [pos node]
-  (= (range/bounds pos :left)
-     (range/bounds node :left)))
-
-(defn at-edge? [pos node]
-  (or (at-end? pos node)
-      (at-start? pos node)))
 
 (defn select-at-cursor [{{:keys [loc pos]} :magic/cursor :as cm} top-loc?]
   (when-let [cursor-loc (sexp-near pos loc {:direction :left})]
@@ -247,7 +237,7 @@
                          nav/top-loc
                          .-node)
 
-                     (at-end? pos cursor-node)
+                     (range/at-end? pos cursor-node)
                      (-> cursor-loc
                          nav/include-prefix-parents
                          .-node)

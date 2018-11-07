@@ -80,6 +80,18 @@
   (= (bounds p1 :left)
      (bounds p2 :left)))
 
+(defn at-end? [pos node]
+  (= (bounds pos :left)
+     (bounds node :right)))
+
+(defn at-start? [pos node]
+  (= (bounds pos :left)
+     (bounds node :left)))
+
+(defn at-edge? [pos node]
+  (or (at-end? pos node)
+      (at-start? pos node)))
+
 (defn empty-range? [node]
   (and (or (= (:line node) (:end-line node)) (nil? (:end-line node)))
        (or (= (:column node) (:end-column node)) (nil? (:end-column node)))))

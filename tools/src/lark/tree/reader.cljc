@@ -9,14 +9,10 @@
        :clj  [[clojure.tools.reader.reader-types :as r]])))
 
 (def ^:dynamic *invalid-nodes* nil)
-(def ^:dynamic *active-cursor-node* nil)
+(def ^:dynamic *active-cursor-line* nil)
 
 (defn active-cursor-line? [line]
-  (identical? line
-              (some-> *active-cursor-node* :line)))
-
-(defn active-cursor-node? [node]
-  (identical? node *active-cursor-node*))
+  (identical? line *active-cursor-line*))
 
 (def ^:dynamic *delimiter* (list))
 

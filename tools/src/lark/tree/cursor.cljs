@@ -102,10 +102,7 @@
                           (z/right)))]
       (resolve-offset data (z/node space-loc)))
     (let [loc (nav/get-loc zipper path)
-          node (z/node loc)]
-      #_(pp/pprint {:found-the-node node
-                  :sticky sticky
-                  :range (range/inner-range node)})
+          node (some-> loc z/node)]
       (assoc (case sticky
                :outer-right (range/bounds node :right)
                :outer-left (range/bounds node :left)

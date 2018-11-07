@@ -8,6 +8,7 @@
             [cljs.pprint :as pp]))
 
 (def ^:dynamic *pretty* false)
+(def ^:dynamic *cursor* nil)
 
 (def SPACES (reduce #(perf/str %1 " ") "" (range 500)))
 
@@ -95,14 +96,6 @@
                     (and (identical? num-passed 1)
                          (not threading-form)) inner-column
                     :else (inc inner-column)))))))))
-
-(defn node-length [{:as node :keys [column end-column]}]
-  (case (.-tag node) :space (if (identical? node rd/*active-cursor-node*)
-                              (count (.-value node))
-                              1)
-                     :tab 1
-                     (:cursor :selection) 0
-                     (- end-column column)))
 
 (defn whitespace-tag? [t]
   (perf/keyword-in? [:space :cursor :selection :tab :newline]

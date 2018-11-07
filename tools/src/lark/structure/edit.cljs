@@ -27,8 +27,8 @@
          pos (cm/pos->boundary (cm/get-cursor editor))
          cursor-loc (when preserve-cursor-space?
                       (nav/cursor-space-loc zipper pos))
-         formatted-zipper (binding [r/*active-cursor-node* (some-> cursor-loc
-                                                                   (z/node))]
+         formatted-zipper (binding [r/*active-cursor-line* (when preserve-cursor-space?
+                                                             (:line pos))]
                             (tree/format-zip zipper))
          formatted-source (:string (z/node formatted-zipper))]
 
@@ -42,7 +42,28 @@
 
      (cm/set-zipper! editor formatted-zipper))))
 
-(def other-bracket {\( \) \[ \] \{ \} \" \"})
+(defn apply-ast!
+  [editor ast]
+  (let [old-string (.getValue editor)
+        {:as new-ast
+         :keys [string
+                ast/cursor-pos]} (tree/format-ast ast)
+        new-zipper (tree/ast-zip new-ast)]
+
+    (when (not= string old-string)                          ;; only mutate editor if value has changed
+      (.setValue editor string))
+
+    (some->> cursor-pos
+             (cm/range->Pos)
+             (.setCursor editor))
+
+    (cm/set-zipper! editor new-zipper)))
+
+(def other-bracket {\( \)
+                    \[ \]
+                    \{ \}
+                    \" \"})
+
 (defn spaces [n] (apply str (take n (repeat " "))))
 
 (def clipboard-helper-element
