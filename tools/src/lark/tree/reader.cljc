@@ -30,6 +30,9 @@
     (- (.-s_pos indexing-reader)
        pushback)))
 
+(defn ignore-prefix? [tag]
+  (perf/keyword-in? [:meta] tag))
+
 (defn edges [tag]
   (case tag
     :list [\( \)]
@@ -42,7 +45,6 @@
     :fn ["#"]
     :quote ["'"]
     :reader-meta ["#^"]
-    :raw-meta ["^"]
     :reader-macro ["#"]
     :regex ["#"]
     :set ["#"]
@@ -120,9 +122,11 @@
 ;; first, last, rest, etc. -- operate on children
 ;; seq -- returns children
 
-(defprotocol IRange
+(defprotocol IMutate
   ;; mutates range of node -- for internal parser use
-  (assoc-range! [this position]))
+  (assoc-range! [this position])
+  (assoc-string! [this string])
+  (assoc-children! [this children]))
 
 (defprotocol IAppend
   (append [this x]))
@@ -142,9 +146,15 @@
 
   ;; ------------- Position information stored via `meta` --------------
 
-  IRange
-  (assoc-range! [this position]
-    (set! range position)
+  IMutate
+  (assoc-range! [this r]
+    (set! range r)
+    this)
+  (assoc-string! [this s]
+    (set! string s)
+    this)
+  (assoc-children! [this c]
+    (set! children c)
     this)
 
   ;; ------------- Equality --------------
@@ -152,8 +162,9 @@
   IEquiv
   (-equiv [o other]
    ;; position not taken into account
+
     (and (some? other)
-         (perf/!keyword-identical? tag (.-tag other))
+         (perf/unchecked-keyword-identical? tag (.-tag other))
          (= range (.-range other))
          (= options (.-options other))
          (= value (.-value other))
@@ -262,8 +273,6 @@
   [(dec (.-line reader))
    (dec (.-column reader))])
 
-(def ^:dynamic *with-position* true)
-
 (defn read-with-position
   "Use the given function to read value, then attach row/col metadata."
   [reader read-fn]
@@ -271,17 +280,15 @@
         start-column (dec (.-column reader))
         start-offset (current-offset reader)]
     (when-let [node (read-fn reader)]
-      (cond-> node
-              *with-position*
-              (assoc-range!
-               [start-line
-                start-column
+      (assoc-range! node
+                    [start-line
+                     start-column
 
-                (dec (.-line reader))
-                (dec (.-column reader))
+                     (dec (.-line reader))
+                     (dec (.-column reader))
 
-                start-offset
-                (current-offset reader)])))))
+                     start-offset
+                     (current-offset reader)]))))
 
 (defn report-invalid! [node]
   (let [node (assoc node :invalid? true)]
@@ -387,8 +394,8 @@
   (let [coll-tag (.-tag coll-node)
         [inner-line inner-col] (current-pos reader)
         inner-offset (current-offset reader)]
-    (case coll-tag
-      :base (assoc coll-node :children out)
+    (if (perf/unchecked-keyword-identical? :base coll-tag)
+      (assoc-children! coll-node out)
       (Splice (let [[left right] (edges coll-tag)
                     width (count left)]
                 (report-invalid!
@@ -412,8 +419,8 @@
   coll-node)
 
 (defn conj-children
-  [coll-node reader {:keys [:read-fn
-                            :count-pred]
+  [coll-node reader {:keys [read-fn
+                            count-pred]
                      take-n :take-n}]
   (loop [i 0
          out []]
@@ -481,9 +488,9 @@
             (recur (and (not escape?) (identical? c \\))
                    (perf/str out c)))
       (report-invalid!
-       (assoc node :tag :token
-                   :options {:tag (.-tag node)}
-                   :value (str \" out))))))
+       (assoc! node :tag :token
+               :options {:tag (.-tag node)}
+               :value (str \" out))))))
 
 (def non-breaking-space \u00A0)
 
@@ -522,11 +529,8 @@
       (identical? "\"" ch)))
 
 (defn prefix-boundary? [ch]
-
-  (perf/identical-in? [\; \: \' \@ \^ \` \~ \\ nil]
-                      ch))
-
-
+  (or (perf/keyword-in? [\; \: \' \@ \^ \` \~ \\] ch)
+      (identical? ch nil)))
 
 (defn boundary? [ch]
   (or (whitespace? ch)

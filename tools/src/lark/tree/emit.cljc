@@ -79,16 +79,14 @@
 
 (defn- with-children [start-line start-column opts node edges]
   (let [tag (.-tag node)
-        is-list? (perf/!keyword-identical? :list tag)
-        operator (and is-list?
-                      (some-> (first (.-children node))
-                              (u/guard #(perf/!keyword-identical? :token (.-tag %)))
-                              .-value))
+        is-list? (perf/unchecked-keyword-identical? :list tag)
+        operator (when is-list?
+                   (some-> (first (.-children node))
+                           (u/guard #(perf/keyword-in? [:keyword :token] (.-tag %)))
+                           .-value))
         next-options {:parent (assoc node :range [start-line start-column])
                       :parent-op operator
-                      :threading-form (and is-list?
-                                           (some-> (:parent-op opts)
-                                                   (u/guard #(str/ends-with? % "->"))))}
+                      :grandparent-op (:parent-op opts)}
         [left right] edges
         column (if (some? left)
                  (+ start-column (.-length left))
@@ -128,63 +126,34 @@
        (not (->> (dec i)
                  (nth siblings)
                  .-tag
-                 (perf/!keyword-identical? :newline)))))
+                 (perf/unchecked-keyword-identical? :newline)))))
 
-(defn- body-indent
-  [parent-node siblings threading-form]
-  (let [column (:column parent-node)
-        tag (.-tag parent-node)
-        inner-column (+ column
-                        (some-> (rd/edges tag)
-                                (first)
-                                (.-length)))]
-    (if-not (perf/!keyword-identical? :list tag)
-      inner-column
-      (let [operator (first siblings)]
-        (if-not (perf/!keyword-identical? :token (some-> operator .-tag))
-          inner-column
-          (max inner-column
-               (let [indent-type (format/indentation-for (name (.-value operator)))]
-                 (if (perf/!keyword-identical? :indent indent-type)
-                   (+ inner-column 1)
-                   (let [indent-offset (-> indent-type
-                                           (cond-> threading-form (dec)))
-                         split-after (+ 2 indent-offset)
-                         [exact? taken _ num-passed] (->> (cond-> siblings
-                                                                  (n/whitespace? operator) (format/butlast-vec))
-                                                          (rd/split-after-n split-after
-                                                                            n/sexp?
-                                                                            (fn [node]
-                                                                              (perf/!keyword-identical? :newline (.-tag node)))))]
-                     (cond exact? (:column (last taken))
-                           (and (identical? num-passed 1)
-                                (not threading-form)) inner-column
-                           :else (inc inner-column)))))))))))
+
 
 (defn materialize
   "Emit ClojureScript string from a magic-tree AST"
   ([node]
    (let [[line column node] (materialize 0 0 node nil nil nil)]
      node))
+  ([node {:as opts
+          :keys [format]}]
+   (binding [format/*pretty* (boolean format)]
+     (materialize node)))
   ([line column node opts i siblings]
    (let [tag (.-tag node)
          value (.-value node)
          with-children* #(with-children line column opts node (rd/edges tag))]
      (when-let [[end-line end-column node]
                 (case tag
-                  :token (with-string line column node value)
-
                   :space (if (and format/*pretty*
                                   (not (rd/active-cursor-line? line)))
                            (when (emit-space? node i siblings)
                              (with-string line column node " "))
                            (with-string line column node value))
 
-                  (:list :vector :map) (with-children*)
-
                   :newline (if (and format/*pretty*
                                     (not (rd/active-cursor-node? node)))
-                             (let [indent (body-indent (get opts :parent) siblings (get opts :threading-form))]
+                             (let [indent (format/body-indent opts siblings)]
                                [(inc line) indent (assoc node :string (str \newline (format/spaces indent)))])
                              [(inc line) (dec (.-length value)) (assoc node :string value)])
                   :number (with-string line column node value)
@@ -195,6 +164,7 @@
                   :error nil
 
                   (:symbol
+                   :token
                    :comma
                    :unmatched-delimiter) (with-string line column node value)
 
@@ -214,7 +184,9 @@
 
                   ;:space moved above
                   (:base
-
+                   :list
+                   :vector
+                   :map
                    :deref
                    :fn
                    :quote
@@ -236,9 +208,9 @@
         (assoc node :range [line column end-line end-column])]))))
 
 (defn string [ast]
-  (-> (cond-> ast (= (type ast) z/ZipperLocation)
-              (.-node))
-      (materialize)
+  (-> (cond-> ast
+              (= (type ast) z/ZipperLocation) (z/node))
+      materialize
       :string))
 
 (defn sexp [node]
@@ -247,7 +219,7 @@
           value (.-value node)
           children (.-children node)
           options (.-options node)]
-      (if (perf/!keyword-identical? :error tag)
+      (if (perf/unchecked-keyword-identical? :error tag)
         (throw (#?(:cljs js/Error.
                    :clj  Exception.) node))
         (case tag

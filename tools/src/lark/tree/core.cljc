@@ -19,35 +19,41 @@
 
 (defn format-zip [loc]
   {:pre [(= (type loc) z/ZipperLocation)]}
-  (binding [format/*pretty* true]
-    (-> loc
-        z/node
-        emit/materialize
-        n/ast-zip)))
+  (-> (z/node loc)
+      (emit/materialize {:format true})
+      n/ast-zip))
+
+(defn format-ast [node]
+  (emit/materialize node {:format true}))
 
 (defn format-string [s]
   {:pre [(string? s)]}
-  (binding [format/*pretty* true]
-    (:string (ast s))))
+  (-> (parse/ast* s)
+      (emit/materialize {:format true})
+      :string))
+
+(defn formatted-ast [s]
+  (-> (parse/ast* s)
+      (emit/materialize {:format true})))
 
 #_(do
 
-  (let [s ""]
-    (let [_ (prn :parse-dirty-string)
-          ast (do #_(dotimes [n 4]
-                      (parse/ast s))
-                (time (parse/ast s)))
+    (let [s ""]
+      (let [_ (prn :parse-dirty-string)
+            ast (do #_(dotimes [n 4]
+                        (parse/ast s))
+                  (time (parse/ast s)))
 
-          _ (prn :emit-dirty-string)
-          _ (do #_(dotimes [n 4]
+            _ (prn :emit-dirty-string)
+            _ (do #_(dotimes [n 4]
                       (emit/string ast))
                 (time (emit/string ast)))
 
-          _ (prn :format-dirty-string-new)
-          _ (simple-benchmark [] (format-string s) 1)
+            _ (prn :format-dirty-string-new)
+            _ (simple-benchmark [] (format-string s) 1)
 
-          s (format-string s)
+            s (format-string s)
 
-          _ (prn :format-clean-string-new)
-          _ (simple-benchmark [] (format-string s) 1)]
-      (println :cljs-core-string-verify (= str s)))))
+            _ (prn :format-clean-string-new)
+            _ (simple-benchmark [] (format-string s) 1)]
+        (println :cljs-core-string-verify (= str s)))))

@@ -15,7 +15,8 @@
                  [chia.util.js-interop :as j]])
             #?@(:clj
                 [[clojure.tools.reader.reader-types :as r]
-                 [clojure.tools.reader.edn :as edn]])))
+                 [clojure.tools.reader.edn :as edn]])
+            [lark.tree.format :as format]))
 
 (declare parse-next)
 
@@ -144,7 +145,7 @@
                              (.-tag)
                              (= first-printable-child-tag))))
        (-> (rd/EmptyNode tag)
-           (assoc :children children)
+           (rd/assoc-children! children)
            (cond-> (seq after)
                    (rd/Splice after)))
        (rd/Splice
@@ -271,7 +272,6 @@
       :comma (rd/ValueNode tag (rd/read-while reader #(identical? % c)))
 
       :space (rd/ValueNode tag (rd/read-while reader rd/space?))
-
       (:list
        :vector
        :map) (rd/NodeWithChildren reader parse-next tag (emit/bracket-match c))
@@ -285,7 +285,7 @@
       :eof nil
 
       :meta (do (r/read-char reader)
-                (take-printable-children reader tag 2))
+                (take-printable-children reader tag 1))
 
       :string (rd/read-string-data (rd/EmptyNode tag) reader))))
 
@@ -299,16 +299,33 @@
   (r/indexing-push-back-reader
    (r/string-push-back-reader s 10)))
 
-(defn ast
+(defn ast*
   [s]
-  (binding [rd/*invalid-nodes* (volatile! [])
-            rd/*with-position* false]
+  (binding [rd/*invalid-nodes* (volatile! [])]
     (let [reader (indexing-reader s)
           base (rd/conj-children (rd/->Node :base nil nil nil nil nil)
                                  reader
                                  {:read-fn parse-next})]
       (-> base
-          (assoc :invalid-nodes
-                 (util/guard-> @rd/*invalid-nodes*
-                               (comp not empty?)))
-          (emit/materialize)))))
+          (rd/assoc-range! [0 0
+                            (dec (.-line reader))
+                            (dec (.-column reader))
+                            0 (.-length s)])
+          (assoc :invalid-nodes (util/guard-> @rd/*invalid-nodes* seq))))))
+
+(defn ast
+  [s]
+  (let [base (ast* s)]
+    (-> base
+        (assoc :string s
+               :children (let [children (.-children base)
+                               end (dec (count children))]
+                           (when-not (neg? end)
+                             (loop [i 0
+                                    children (transient children)]
+                               (if (identical? i end)
+                                 (persistent! children)
+                                 (let [node (nth children i)]
+                                   (recur (inc i)
+                                          (assoc! children i
+                                                  (rd/assoc-string! node (subs s (:offset node) (:end-offset node))))))))))))))

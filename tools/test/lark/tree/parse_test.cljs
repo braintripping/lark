@@ -11,6 +11,9 @@
 
 (def shape ext/shape)
 
+(-> (parse/ast "\n")
+    (ext/group-comment-blocks))
+
 (deftest parse
   (binding [lark.tree.emit/*ns* (symbol "lark.tree.parse-test")
             r/*alias-map* '{a abracadabra}]
@@ -261,10 +264,10 @@
 
 (deftest ranges
   (doall (for [s ["abracadabra"
-                  "a"
+
                   "1"
                   ":a"
-                  "[abc]"]
+                  "[ a b c ( ) ->]"]
                :let [ast (parse/ast s)]]
            (is (= (count s)
                   (- (:end-column ast)

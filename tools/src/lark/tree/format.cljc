@@ -36,36 +36,72 @@
                 (perf/identical? :newline)
                 (not))))
 
-(defn indentation-for [x]
-  (case x
+(def FUNCTION_INDENT 0)                                     ;; could also be :indent
 
-    ("bound-fn" "extend" "extend-protocol" "extend-type" "fn" "ns" "reify")
-    :indent
+(defn operator-indentation [grandparent-op parent-op]
+  (cond (nil? parent-op) :none
+        (and grandparent-op
+             (identical? grandparent-op "ns")
+             (keyword? parent-op)) 0
+        :else
+        (case parent-op
+          ("bound-fn" "extend" "extend-protocol" "extend-type" "fn" "ns" "reify")
+          :indent
 
-    ("cond" "do" "finally" "try" "with-out-str" "go")
-    0
+          ("cond" "do" "finally" "try" "with-out-str" "go")
+          0
 
-    ("assoc" "apply" "binding" "case" "definterface" "defstruct" "deftype" "doseq" "dotimes" "doto"
-     "for" "if" "if-let" "if-not" "if-some" "let" "letfn" "locking" "loop"
-     "struct-map" "when" "when-first" "when-let" "when-not" "when-some"
-     "while" "with-bindings" "with-local-vars" "with-open" "with-redefs"
-     "with-redefs-fn" "go-loop" "are" "deftest" "testing")
-    1
+          ("assoc" "apply" "binding" "case" "definterface" "defstruct" "deftype" "doseq" "dotimes" "doto"
+           "for" "if" "if-let" "if-not" "if-some" "let" "letfn" "locking" "loop"
+           "struct-map" "when" "when-first" "when-let" "when-not" "when-some"
+           "while" "with-bindings" "with-local-vars" "with-open" "with-redefs"
+           "with-redefs-fn" "go-loop" "are" "deftest" "testing")
+          1
 
-    ("catch" "condp" "proxy")
-    2
-    (cond (str/starts-with? x "def") :indent
-          (re-find #"with|when|if" x) 1
-          ;(str/ends-with? x "->") 1
-          :else 0)))
+          ("catch" "condp" "proxy")
+          2
+          (cond (str/starts-with? parent-op "def") :indent
+                (re-find #"with|when|if" parent-op) 1
+                ;(str/ends-with? x "->") 1
+                :else FUNCTION_INDENT))))
 
-(defn threading-node?
-  [node]
-  (when-let [operator (and (perf/identical? :list (.-tag node))
-                           (some-> (.-children node)
-                                   (first)))]
-    (and (perf/identical? :token (.-tag operator))
-         (str/ends-with? (.-value operator) "->"))))
+(defn butlast-vec [v]
+  (cond-> v
+          (not (empty? v)) (pop)))
+
+(defn body-indent
+  [{:keys [parent
+           parent-op
+           grandparent-op]
+    :as opts} siblings]
+  (let [column (:column parent)
+        tag (.-tag parent)
+        inner-column (+ column
+                        (some-> (rd/edges tag)
+                                (first)
+                                (.-length)))]
+    (if-not (perf/unchecked-keyword-identical? :list tag)
+      inner-column
+      (let [operator (first siblings)]
+        (let [indent-type (operator-indentation grandparent-op parent-op)]
+          (case indent-type
+            :none inner-column
+            :indent (inc inner-column)
+            (let [threading-form (some-> grandparent-op (str/ends-with? "->"))
+                  indent-offset (-> indent-type
+                                    (cond->
+                                     threading-form (dec)))
+                  split-after (+ 2 indent-offset)
+                  [exact? taken _ num-passed] (->> (cond-> siblings
+                                                           (n/whitespace? operator) (butlast-vec))
+                                                   (rd/split-after-n split-after
+                                                                     n/sexp?
+                                                                     (fn [node]
+                                                                       (perf/unchecked-keyword-identical? :newline (.-tag node)))))]
+              (cond exact? (:column (last taken))
+                    (and (identical? num-passed 1)
+                         (not threading-form)) inner-column
+                    :else (inc inner-column)))))))))
 
 (defn node-length [{:as node :keys [column end-column]}]
   (case (.-tag node) :space (if (identical? node rd/*active-cursor-node*)
@@ -78,41 +114,6 @@
 (defn whitespace-tag? [t]
   (perf/keyword-in? [:space :cursor :selection :tab :newline]
                     t))
-
-(defn butlast-vec [v]
-  (cond-> v
-          (not (empty? v)) (pop)))
-
-(defn body-indent*
-  [indent-level loc]
-  (assert (number? indent-level))
-  (let [node (.-node loc)
-        tag (.-tag node)]
-    (if-not (perf/identical? :list tag)
-      indent-level
-      (let [children (.. loc -node -children)
-            operator (first children)]
-        (if-not (perf/identical? :token (some-> operator .-tag))
-          indent-level
-          (let [indent-type (indentation-for (name (.-value operator)))]
-            (if (perf/identical? :indent indent-type)
-              (+ indent-level 1)
-              (let [threading? (and (perf/identical? :list tag)
-                                    (some-> (nav/up-node loc)
-                                            (threading-node?)))
-                    indent-offset (-> indent-type
-                                      (cond-> threading? (dec)))
-                    split-after (+ 2 indent-offset)
-                    [exact? taken _ num-passed] (->> (cond-> children
-                                                             (n/whitespace? operator) (butlast-vec))
-                                                     (rd/split-after-n split-after
-                                                                       n/sexp?
-                                                                       (fn [node]
-                                                                         (perf/identical? :newline (.-tag node)))))]
-                (+ indent-level (cond exact? (reduce + 0 (mapv node-length (pop taken)))
-                                      (and (identical? num-passed 1)
-                                           (not threading?)) 0
-                                      :else 1))))))))))
 
 (defn pad-chars?
   "Returns true if space should be left inbetween characters c1 and c2."

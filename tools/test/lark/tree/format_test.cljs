@@ -103,10 +103,7 @@
                               "(def x\n  1)\nx"]
 
                              (partition 2))]
-           (let [formatted (binding [format/*pretty* true]
-                             (-> in
-                                 (parse/ast)
-                                 :string))]
+           (let [formatted (tree/format-string in)]
              (when-not (= formatted out)
                (js/console.log in)
                (js/console.log formatted)
@@ -171,19 +168,19 @@
           (tree/format-zip)
           (p)))
 
-(comment
- (deftest emit-ast
+(do 'cljs.core
+ (deftest ^:dev/always emit-ast
    (doseq [s [""]]
-     (let [dirty-ast (tree/ast s)
-           new-ast (emit/materialize dirty-ast)
-           unformatted-new (emit/materialize dirty-ast)
-           formatted-new (binding [format/*pretty* true]
-                           (:string dirty-ast))
-           clean-ast (emit/materialize dirty-ast)]
+     (let [dirty-ast (time (parse/ast s))
+           formatted-ast (time (emit/materialize dirty-ast {:format true}))]
+       (when (not= (:string dirty-ast)
+                   (:string formatted-ast))
+         (js/console.log (:string dirty-ast))
+         (js/console.log (:string formatted-ast)))
 
        #_(is (= dirty-ast (emit/materialize dirty-ast))
              "AST is not modified")
-       (is (= s (:string unformatted-new))
+       (is (= s (:string dirty-ast))
            "String is emitted correctly")
 
        #_(.profile js/console "new formatting")
@@ -191,11 +188,15 @@
        #_(simple-benchmark [] (emit/materialize clean-ast) 5)
        #_(.profileEnd js/console)
 
-       (binding [format/*pretty* true]
+       #_(binding [format/*pretty* true]
          #_(simple-benchmark [] (-> (parse/ast s)
                                     (emit/string-old)
                                     (tree/ast)) 5)
          (simple-benchmark [] (-> (parse/ast s)
                                   :string) 5))))))
+
+;; Known inconsistency: meta tags
+(js/console.log (tree/format-string "(goog-define\n x\n 10)"))
+(js/console.log (tree/format-string "(1\n2)"))
 
 

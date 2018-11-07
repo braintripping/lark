@@ -109,9 +109,8 @@
                                        :original-range (range/bounds (z/node target-loc))})
 
                      ;; format the code and put in a new editor
-                     formatted-zipper (binding [format/*pretty* true]
-                                        (-> (tree/ast (.getValue editor))
-                                            (tree/ast-zip)))
+                     formatted-zipper (-> (tree/formatted-ast (.getValue editor))
+                                          (tree/ast-zip))
                      formatted-str (-> formatted-zipper
                                        z/node
                                        :string)
