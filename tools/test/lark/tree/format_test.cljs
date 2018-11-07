@@ -11,7 +11,15 @@
 
 
 (deftest format
-  (doall (for [[in out] (->> [
+  (doall (for [[in out] (->> ["()()"
+                              "() ()"
+
+                              "()a"
+                              "() a"
+
+                              "a()"
+                              "a ()"
+
                               "( )"
                               "()"
 
@@ -30,7 +38,7 @@
                               "(-> {} \n (assoc \n :a 1))"
                               "(-> {} \n    (assoc \n      :a 1))"
 
-                              "()[\n]" "()[\n   ]"
+                              "()[\n]" "() [\n    ]"
                               "[\n]   {\n}" "[\n ] {\n    }"
 
                               "[1\n2]"
@@ -111,12 +119,12 @@
              (is (= formatted out))))))
 
 #_(extend-type z/ZipperLocation
-  IDeref
-  (-deref [x] (.-node x))
-  IPrintWithWriter
-  (-pr-writer [o writer _]
-    (-write writer
-            (str "#Z" (prn-str (z/node o))))))
+    IDeref
+    (-deref [x] (.-node x))
+    IPrintWithWriter
+    (-pr-writer [o writer _]
+      (-write writer
+              (str "#Z" (prn-str (z/node o))))))
 
 (defn p [x] (doto x prn))
 
@@ -168,35 +176,33 @@
           (tree/format-zip)
           (p)))
 
-(do 'cljs.core
- (deftest ^:dev/always emit-ast
-   (doseq [s [""]]
-     (let [dirty-ast (time (parse/ast s))
-           formatted-ast (time (emit/materialize dirty-ast {:format true}))]
-       (when (not= (:string dirty-ast)
-                   (:string formatted-ast))
-         (js/console.log (:string dirty-ast))
-         (js/console.log (:string formatted-ast)))
+(comment 'cljs.core
+    (deftest ^:dev/always emit-ast
+      (doseq [s [""]]
+        (let [dirty-ast (time (parse/ast s))
+              #_#_formatted-ast (time (emit/materialize dirty-ast {:format true}))]
 
-       #_(is (= dirty-ast (emit/materialize dirty-ast))
-             "AST is not modified")
-       (is (= s (:string dirty-ast))
-           "String is emitted correctly")
 
-       #_(.profile js/console "new formatting")
-       #_(simple-benchmark [] (emit/materialize dirty-ast) 5)
-       #_(simple-benchmark [] (emit/materialize clean-ast) 5)
-       #_(.profileEnd js/console)
+          #_(is (= dirty-ast (emit/materialize dirty-ast))
+                "AST is not modified")
+          (is (= s (:string dirty-ast))
+              "String is emitted correctly")
 
-       #_(binding [format/*pretty* true]
-         #_(simple-benchmark [] (-> (parse/ast s)
-                                    (emit/string-old)
-                                    (tree/ast)) 5)
-         (simple-benchmark [] (-> (parse/ast s)
-                                  :string) 5))))))
+          #_(.profile js/console "new formatting")
+          #_(simple-benchmark [] (emit/materialize dirty-ast) 5)
+          #_(simple-benchmark [] (emit/materialize clean-ast) 5)
+          #_(.profileEnd js/console)
+
+          #_(binding [format/*pretty* true]
+              #_(simple-benchmark [] (-> (parse/ast s)
+                                         (emit/string-old)
+                                         (tree/ast)) 5)
+              (simple-benchmark [] (-> (parse/ast s)
+                                       :string) 5)))
+        (let [ast (parse/ast* s)]
+          (simple-benchmark [] (-> (emit/materialize ast {:format true})
+                                   :string) 5)))))
 
 ;; Known inconsistency: meta tags
-(js/console.log (tree/format-string "(goog-define\n x\n 10)"))
-(js/console.log (tree/format-string "(1\n2)"))
 
 

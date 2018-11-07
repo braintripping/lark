@@ -3,6 +3,7 @@
   (:require [fast-zip.core :as z]
             [lark.tree.fn :refer [fn-walk]]
             [clojure.string :as str]
+            [clojure.pprint :as pp]
             [lark.tree.reader :as rd]
             [lark.tree.node :as n]
             [lark.tree.nav :as nav]
@@ -77,6 +78,26 @@
                        (+ column (.-length string))
                        (dec (format/last-line-length string))) (assoc node :string string)]))
 
+(defn- emit-space? [node i siblings more-siblings?]
+  (and more-siblings?
+       (not (zero? i))
+       (not (->> (nth siblings (dec i))
+                 .-tag
+                 (perf/unchecked-keyword-identical? :newline)))))
+
+(defn- add-space? [t1 t2]
+  (and format/*pretty*
+       (not (perf/keyword-in? [:_
+                               :space
+                               :newline] t1))
+       (not (perf/keyword-in? [:space
+                               :newline] t2))
+
+       #_(let [m1 (n/may-contain-children? t1)
+               m2 (n/may-contain-children? t2)]
+
+           )))
+
 (defn- with-children [start-line start-column opts node edges]
   (let [tag (.-tag node)
         is-list? (perf/unchecked-keyword-identical? :list tag)
@@ -94,52 +115,67 @@
         [line column children-nodes children-str] (let [children (.-children node)
                                                         children (cond-> children
                                                                          (seq? children) (vec))
-                                                        end (count children)
-                                                        opts next-options]
+                                                        children-count (count children)
+                                                        opts next-options
+                                                        right? (some? right)]
                                                     (loop [i 0
+                                                           out-i 0
                                                            line start-line
                                                            column column
-                                                           children children
-                                                           out-str (or left "")]
-                                                      (if (identical? i end)
-                                                        [line column children (cond-> out-str
-                                                                                      (some? right) (perf/str right))]
-                                                        (if-let [[line column node] (materialize line column (nth children i) opts i children)]
-                                                          (recur (inc i)
-                                                                 line
-                                                                 column
-                                                                 (assoc children i node)
-                                                                 (perf/str out-str (.-string node)))
-                                                          (recur (inc i)
-                                                                 line
-                                                                 column
-                                                                 children
-                                                                 out-str)))))
+                                                           out []
+                                                           out-str (or left "")
+                                                           last-tag :_]
+                                                      (if (identical? i children-count)
+                                                        [line column out (cond-> out-str
+                                                                                 right? (perf/str right))]
+                                                        (let [node (nth children i)
+                                                              tag (.-tag node)
+                                                              more-siblings? (not (identical? i (dec children-count)))]
+                                                          (if (add-space? last-tag tag)
+                                                            (recur i
+                                                                   (inc out-i)
+                                                                   line
+                                                                   (inc column)
+                                                                   (conj out (rd/ValueNode :space " "))
+                                                                   (perf/str out-str " ")
+                                                                   :space)
+                                                            (if-let [[line column next-node] (materialize line
+                                                                                                          column
+                                                                                                          (nth children i)
+                                                                                                          opts
+                                                                                                          out-i
+                                                                                                          out
+                                                                                                          more-siblings?)]
+
+                                                              (recur (inc i)
+                                                                     (inc out-i)
+                                                                     line
+                                                                     column
+                                                                     (conj out next-node)
+                                                                     (perf/str out-str (.-string next-node))
+                                                                     tag)
+                                                              (recur (inc i)
+                                                                     out-i
+                                                                     line
+                                                                     column
+                                                                     out
+                                                                     out-str
+                                                                     last-tag)))))))
         column (cond-> column
                        (some? right) (+ (.-length right)))]
     [line column (assoc node :string children-str
                              :children children-nodes)]))
 
-(defn- emit-space? [node i siblings]
-  (and (not (zero? i))
-       (not (identical? node (peek siblings)))
-       (not (->> (dec i)
-                 (nth siblings)
-                 .-tag
-                 (perf/unchecked-keyword-identical? :newline)))))
-
-
-
 (defn materialize
   "Emit ClojureScript string from a magic-tree AST"
   ([node]
-   (let [[line column node] (materialize 0 0 node nil nil nil)]
+   (let [[line column node] (materialize 0 0 node nil nil nil 0)]
      node))
   ([node {:as opts
           :keys [format]}]
    (binding [format/*pretty* (boolean format)]
      (materialize node)))
-  ([line column node opts i siblings]
+  ([line column node opts i siblings more-siblings?]
    (let [tag (.-tag node)
          value (.-value node)
          with-children* #(with-children line column opts node (rd/edges tag))]
@@ -147,7 +183,7 @@
                 (case tag
                   :space (if (and format/*pretty*
                                   (not (rd/active-cursor-line? line)))
-                           (when (emit-space? node i siblings)
+                           (when (emit-space? node i siblings more-siblings?)
                              (with-string line column node " "))
                            (with-string line column node value))
 

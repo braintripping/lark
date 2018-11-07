@@ -29,13 +29,6 @@
     (when-not (identical? -1 last-line-start)
       (- (.-length s) last-line-start))))
 
-(defn emit-space? [loc]
-  (and (some? (nav/right-node loc))
-       (some->> (nav/left-node loc)
-                .-tag
-                (perf/identical? :newline)
-                (not))))
-
 (def FUNCTION_INDENT 0)                                     ;; could also be :indent
 
 (defn operator-indentation [grandparent-op parent-op]

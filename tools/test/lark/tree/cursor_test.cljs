@@ -79,7 +79,8 @@
 
 (deftest formatting-with-cursors
   (doall (for [[in-str expected-sexp expected-sticky expected-str-with-cursor]
-               '[["( ( ( a b | ) ) )" (a b) :inner-right "(((a b|)))"]
+               '[["( a |)" (a) :inner-right "(a|)"]
+                 ["( ( ( a b | ) ) )" (a b) :inner-right "(((a b|)))"]
                  ["(|    )" () :inner-left "(|)"]
                  ["(a |)" (a) :inner-right "(a|)"]
                  ["(a\n   | )" (a) :inner-right "(a\n |)"]

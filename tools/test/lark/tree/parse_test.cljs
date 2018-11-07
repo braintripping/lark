@@ -85,7 +85,11 @@
 
     (testing "always re-emits the same string"
       (are [in-string]
-        (is (= in-string (tree/format-string in-string)))
+        (let [re-emitted-string (:string (tree/ast in-string))]
+          (when-not (= in-string re-emitted-string)
+            (js/console.log in-string)
+            (js/console.log re-emitted-string))
+          (is (= in-string re-emitted-string)))
         "("
         ")"
         "#{([(^.\" # ^ # . !@#$%6 65465436542150- < >>< <  ~!~ !@ ~ ' * % $"
