@@ -12,11 +12,11 @@
 (def ^:dynamic *active-cursor-node* nil)
 
 (defn active-cursor-line? [line]
-  (= line (some-> *active-cursor-node* :line)))
+  (identical? line
+              (some-> *active-cursor-node* :line)))
 
 (defn active-cursor-node? [node]
-  (when node
-    (= node *active-cursor-node*)))
+  (identical? node *active-cursor-node*))
 
 (def ^:dynamic *delimiter* (list))
 

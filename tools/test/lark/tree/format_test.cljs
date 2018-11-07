@@ -176,7 +176,7 @@
           (tree/format-zip)
           (p)))
 
-(comment 'cljs.core
+(do 'cljs.core
     (deftest ^:dev/always emit-ast
       (doseq [s [""]]
         (let [dirty-ast (time (parse/ast s))
@@ -200,8 +200,10 @@
               (simple-benchmark [] (-> (parse/ast s)
                                        :string) 5)))
         (let [ast (parse/ast* s)]
+          (.profile js/console "new formatting")
           (simple-benchmark [] (-> (emit/materialize ast {:format true})
-                                   :string) 5)))))
+                                   :string) 10)
+          (.profileEnd js/console)))))
 
 ;; Known inconsistency: meta tags
 

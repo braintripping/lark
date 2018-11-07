@@ -78,104 +78,98 @@
                        (+ column (.-length string))
                        (dec (format/last-line-length string))) (assoc node :string string)]))
 
-(defn- emit-space? [node i siblings more-siblings?]
+(defn- emit-space? [prev-siblings more-siblings?]
   (and more-siblings?
-       (not (zero? i))
-       (not (->> (nth siblings (dec i))
+       (not (zero? (count prev-siblings)))
+       (not (->> (peek prev-siblings)
                  .-tag
                  (perf/unchecked-keyword-identical? :newline)))))
 
 (defn- add-space? [t1 t2]
-  (and format/*pretty*
-       (not (perf/keyword-in? [:_
-                               :space
-                               :newline] t1))
-       (not (perf/keyword-in? [:space
-                               :newline] t2))
+  (and (not (perf/unchecked-keyword-identical? :space t1))
+       (not (perf/unchecked-keyword-identical? :space t2))
+       (not (perf/unchecked-keyword-identical? :newline t1))
+       (not (perf/unchecked-keyword-identical? :newline t2))
+       (not (perf/unchecked-keyword-identical? :_ t1))))
 
-       #_(let [m1 (n/may-contain-children? t1)
-               m2 (n/may-contain-children? t2)]
+(def space-node (rd/ValueNode :space " "))
 
-           )))
+(defn get-operator [tag children child-count]
 
-(defn- with-children [start-line start-column opts node edges]
+  (when (and (not (zero? child-count))
+             (some? tag)
+             (perf/unchecked-keyword-identical? :list tag))
+    (some-> (first children)
+            (u/guard #(perf/keyword-in? [:keyword :token] (.-tag %)))
+            .-value)))
+
+(defn- with-children [line column options node edges]
   (let [tag (.-tag node)
-        is-list? (perf/unchecked-keyword-identical? :list tag)
-        operator (when is-list?
-                   (some-> (first (.-children node))
-                           (u/guard #(perf/keyword-in? [:keyword :token] (.-tag %)))
-                           .-value))
-        next-options {:parent (assoc node :range [start-line start-column])
-                      :parent-op operator
-                      :grandparent-op (:parent-op opts)}
+        children (.-children node)
+        ;; note - may need to use special zipper operations to ensure that
+        ;; children is always a vector
+        children (if (vector? children)
+                   children
+                   (vec children))
+        children-count (-count children)
+        options {:parent (assoc node :range [line column])
+                 :parent-op (get-operator tag children children-count)
+                 :grandparent-op (:parent-op options)}
         [left right] edges
-        column (if (some? left)
-                 (+ start-column (.-length left))
-                 start-column)
-        [line column children-nodes children-str] (let [children (.-children node)
-                                                        children (cond-> children
-                                                                         (seq? children) (vec))
-                                                        children-count (count children)
-                                                        opts next-options
-                                                        right? (some? right)]
-                                                    (loop [i 0
-                                                           out-i 0
-                                                           line start-line
-                                                           column column
-                                                           out []
-                                                           out-str (or left "")
-                                                           last-tag :_]
-                                                      (if (identical? i children-count)
-                                                        [line column out (cond-> out-str
-                                                                                 right? (perf/str right))]
-                                                        (let [node (nth children i)
-                                                              tag (.-tag node)
-                                                              more-siblings? (not (identical? i (dec children-count)))]
-                                                          (if (add-space? last-tag tag)
-                                                            (recur i
-                                                                   (inc out-i)
-                                                                   line
-                                                                   (inc column)
-                                                                   (conj out (rd/ValueNode :space " "))
-                                                                   (perf/str out-str " ")
-                                                                   :space)
-                                                            (if-let [[line column next-node] (materialize line
-                                                                                                          column
-                                                                                                          (nth children i)
-                                                                                                          opts
-                                                                                                          out-i
-                                                                                                          out
-                                                                                                          more-siblings?)]
+        left (or left "")
+        right (or right "")]
+    (loop [i 0
+           line line
+           column (+ column (.-length left))
+           children-out []
+           string-out left
+           last-tag :_]
+      (if (identical? i children-count)
+        [line
+         (+ column (.-length right))
+         (assoc node :children children-out
+                     :string (perf/str string-out right))]
+        (let [node (nth children i)
+              tag (.-tag node)
+              more-siblings? (not (identical? i (dec children-count)))]
+          (if (and format/*pretty*
+                   (add-space? last-tag tag))
+            (recur i
+                   line
+                   (inc column)
+                   (conj children-out space-node)
+                   (perf/str string-out " ")
+                   :space)
+            (if-let [[line column next-node] (materialize line
+                                                          column
+                                                          node
+                                                          options
+                                                          children-out
+                                                          more-siblings?)]
 
-                                                              (recur (inc i)
-                                                                     (inc out-i)
-                                                                     line
-                                                                     column
-                                                                     (conj out next-node)
-                                                                     (perf/str out-str (.-string next-node))
-                                                                     tag)
-                                                              (recur (inc i)
-                                                                     out-i
-                                                                     line
-                                                                     column
-                                                                     out
-                                                                     out-str
-                                                                     last-tag)))))))
-        column (cond-> column
-                       (some? right) (+ (.-length right)))]
-    [line column (assoc node :string children-str
-                             :children children-nodes)]))
+              (recur (inc i)
+                     line
+                     column
+                     (conj children-out next-node)
+                     (perf/str string-out (.-string next-node))
+                     tag)
+              (recur (inc i)
+                     line
+                     column
+                     children-out
+                     string-out
+                     last-tag))))))))
 
 (defn materialize
   "Emit ClojureScript string from a magic-tree AST"
   ([node]
-   (let [[line column node] (materialize 0 0 node nil nil nil 0)]
+   (let [[line column node] (materialize 0 0 node nil nil nil)]
      node))
   ([node {:as opts
           :keys [format]}]
    (binding [format/*pretty* (boolean format)]
      (materialize node)))
-  ([line column node opts i siblings more-siblings?]
+  ([line column node opts prev-siblings more-siblings?]
    (let [tag (.-tag node)
          value (.-value node)
          with-children* #(with-children line column opts node (rd/edges tag))]
@@ -183,13 +177,13 @@
                 (case tag
                   :space (if (and format/*pretty*
                                   (not (rd/active-cursor-line? line)))
-                           (when (emit-space? node i siblings more-siblings?)
+                           (when (emit-space? prev-siblings more-siblings?)
                              (with-string line column node " "))
                            (with-string line column node value))
 
                   :newline (if (and format/*pretty*
                                     (not (rd/active-cursor-node? node)))
-                             (let [indent (format/body-indent opts siblings)]
+                             (let [indent (format/body-indent opts prev-siblings)]
                                [(inc line) indent (assoc node :string (str \newline (format/spaces indent)))])
                              [(inc line) (dec (.-length value)) (assoc node :string value)])
                   :number (with-string line column node value)
