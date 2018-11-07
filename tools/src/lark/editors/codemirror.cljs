@@ -51,11 +51,13 @@
              :column (.-ch o)
              :end-line (.-line o)
              :end-column (.-ch o)
-             (gobj/get o k)))
+             nil))
     ([o k not-found]
      (case k :line (.-line o)
-             :column (.-column o)
-             (gobj/get o k not-found)))))
+             :column (.-ch o)
+             :end-line (.-line o)
+             :end-column (.-ch o)
+             not-found))))
 
 (defn range->Pos
   "Coerces Clojure maps to CodeMirror positions."
