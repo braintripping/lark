@@ -343,6 +343,7 @@
                                                   :bracket-loc bracket-loc
                                                   :bracket-node bracket-node
                                                   :pos pos
+                                                  :zipper zipper
                                                   :prev-zipper zipper})))))))
 
 (defn require-opts [cm opts]
