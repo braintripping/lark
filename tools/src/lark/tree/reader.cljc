@@ -314,6 +314,20 @@
 (defn EmptyNode [tag]
   (->Node tag nil nil nil nil nil))
 
+(defn StartingNode [tag reader]
+  (->Node tag
+          nil
+          [(dec (.-line reader))
+           (-> (dec (.-column reader))
+               (- (count (first (edges tag)))))
+           nil
+           nil
+           (current-offset reader)
+           nil]
+          nil
+          nil
+          nil))
+
 (defn split-after-n
   "Splits after `n` values which pass `pred`.
 
@@ -345,7 +359,6 @@
          out []]
     (if (> i 10000)
       (do
-        (prn :take-children out)
         (js/console.error (js/Error. "Infinite loop?"))
         [false out nil])
       (if (and (some? take-n)
@@ -387,28 +400,26 @@
                 (recur next-i (conj out next-node))))))))))
 
 (defn- invalid-exit [coll-node reader out]
-  (let [coll-tag (.-tag coll-node)
-        [inner-line inner-col] (current-pos reader)
-        inner-offset (current-offset reader)]
+  (let [coll-tag (.-tag coll-node)]
     (if (perf/unchecked-keyword-identical? :base coll-tag)
       (assoc-children! coll-node out)
       (Splice (let [[left right] (edges coll-tag)
                     width (count left)]
                 (report-invalid!
-                 (doto (EmptyNode :unmatched-delimiter)
-                   (-> .-options
-                       (set! {:info {:tag coll-tag
-                                     :direction :forward
-                                     :expects right}}))
-                   (-> .-range
-                       (set! [inner-line
-                              (- inner-col width)
-                              0 #_inner-line
-                              width #_inner-col
-                              (- inner-offset width)
-                              inner-offset]))
-                   (-> .-value
-                       (set! left))))) out))))
+                 (Node. :unmatched-delimiter
+                        {:info {:tag coll-tag
+                                :direction :forward
+                                :expects right}}
+                        [(:line coll-node)
+                         (:column coll-node)
+                         (:line coll-node)
+                         (+ (:column coll-node) width)
+                         (:offset coll-node)
+                         (current-offset reader)]
+                        left
+                        nil
+                        nil)))
+              out))))
 
 (defn- valid-exit [coll-node out]
   (set! (.-children coll-node) out)
@@ -469,7 +480,7 @@
   [reader read-fn tag delimiter]
   (r/read-char reader)
   (binding [*delimiter* (cons delimiter *delimiter*)]
-    (conj-children (EmptyNode tag) reader {:read-fn read-fn})))
+    (conj-children (StartingNode tag reader) reader {:read-fn read-fn})))
 
 (defn read-string-data
   [node reader]

@@ -211,7 +211,7 @@
                   :cursor (do (vreset! format/*cursor*
                                        {:line line
                                         :column column})
-                               (when *print-selections*
+                              (when *print-selections*
                                 (with-string line column node "|")))
 
                   :selection (when *print-selections*
@@ -335,13 +335,13 @@
                                                                     {:options options}))))
                                            *ns*)
                                          namespace-name)]
-                            (u/update-keys (fn [k]
-                                             (if-not (keyword? k)
-                                               k
-                                               (let [the-ns (namespace k)]
-                                                 (cond (nil? the-ns) (keyword map-ns (name k))
-                                                       (= "_" the-ns) (keyword (name k))
-                                                       :else k)))) m))
+                            (u/update-keys m (fn [k]
+                                               (if-not (keyword? k)
+                                                 k
+                                                 (let [the-ns (namespace k)]
+                                                   (cond (nil? the-ns) (keyword map-ns (name k))
+                                                         (= "_" the-ns) (keyword (name k))
+                                                         :else k))))))
 
           (:comment
            :comment-block

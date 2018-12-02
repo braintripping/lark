@@ -276,10 +276,11 @@
 (defn highlight-parse-errors! [cm error-ranges]
   (clear-parse-errors! cm)
   (let [handles (into [] (for [node error-ranges]
-                           (mark-range! cm node #js {:className (str "error-text"
-                                                                     (when-let [tag (some-> (get-in node [:info :tag])
-                                                                                            (name))]
-                                                                       (str " cm-" tag)))})))]
+                           (mark-range! cm (range/bounds node)
+                                        #js {:className (str "cm-error-text"
+                                                             (when-let [tag (some-> (get-in node [:info :tag])
+                                                                                    (name))]
+                                                               (str " cm-" tag)))})))]
     (swap! cm assoc-in [:magic/errors :handles] handles)))
 
 ;; todo
@@ -299,7 +300,7 @@
      (when-let [on-ast (get-in editor [:view :on-ast])]
        (on-ast ast))
      (when decorate?
-       (highlight-parse-errors! editor (get (.-node zipper) :invalid-nodes))))))
+       (highlight-parse-errors! editor (get ast :invalid-nodes))))))
 
 (defn update-ast!
   [{{:as ast

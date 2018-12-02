@@ -4,7 +4,8 @@
             [lark.editor :as editor]
             [lark.editors.codemirror :as cm]
             ["codemirror" :as CM]
-            [chia.util.js-interop :as j]))
+            [chia.util.js-interop :as j]
+            [clojure.spec.alpha :as s]))
 
 #_(def options
     {:theme "maria-light"
@@ -20,14 +21,22 @@
                                           false
                                           true)})})
 
+(s/def :event/mousedown fn?)
+(s/def :event/keydown fn?)
+(s/def ::on-ast fn?)
+(s/def ::keymap map?)
+(s/def ::error-ranges (s/nilable (s/coll-of #(:line %))))
+
 (defn reset-value [^js editor next-value]
   (cm/set-value-and-refresh! editor next-value #_(or value default-value)))
 
 (v/defview CodeView
-  {:spec/props {:event/mousedown :Function
-                :event/keydown :Function
-                :on-ast :Function
-                :keymap :Map}
+  {:spec/props (s/keys
+                :opt [:event/mousedown
+                      :event/keydown]
+                :opt-un [::on-ast
+                         ::keymap
+                         ::error-ranges])
    :view/did-mount (fn [{:keys [default-value
                                 value
                                 on-update
@@ -47,6 +56,7 @@
                                                        :magicBrackets true
                                                        :magicEdit true
                                                        :flattenSpans true
+                                                       :viewportMargin js/Infinity
                                                        :configureMouse (fn [cm repeat ^js e]
                                                                          #js {:moveOnDrag (if (.-shiftKey e)
                                                                                             false

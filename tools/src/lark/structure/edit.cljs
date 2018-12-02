@@ -44,13 +44,12 @@
 
 (defn apply-ast!
   [editor ast]
-  (let [old-string (.getValue editor)
-        {:as new-ast
+  (let [{:as new-ast
          :keys [string
                 ast/cursor-pos]} (tree/format-ast ast)
         new-zipper (tree/ast-zip new-ast)]
 
-    (when (not= string old-string)                          ;; only mutate editor if value has changed
+    (when (not= string (.getValue editor))                          ;; only mutate editor if value has changed
       (.setValue editor string))
 
     (some->> cursor-pos

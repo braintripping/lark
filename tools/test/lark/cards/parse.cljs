@@ -6,15 +6,6 @@
             [lark.tree.node :as node]
             [lark.tree.parse :as parse]))
 
-(defn emit-node-with-decoration [{:as node
-                                  {:keys [invalid? error]} :options}]
-  (let [possibly-children? (node/may-contain-children? node)]
-    (if possibly-children?
-      (let [[l r] (node/edges node)]
-        [:span l (map emit-node-with-decoration (.-children node)) r])
-      (cond->> (emit/string node)
-               invalid? (conj [:span.red])))))
-
 (defn emit-node-structure
   [node]
   (let [tag (cond->> (str (.-tag node))
@@ -34,25 +25,25 @@
    :view/initial-state (fn [_ _ s] {:value s})}
   [{:keys [view/state]}]
   (let [value (:value @state)
-        node (parse/ast value)
-        emitted (emit/string node)]
-    [:div.bb.b--near-white.mv3.flex
+        node (emit/materialize (parse/ast value))
+        emitted (:string node)]
+    [:div.bb.b--near-white.pa3
      {:style {:white-space "pre-wrap"}}
-     [:.pa2 {:style {:width "25%" :height 40}}
-      (CodeView {:value value
-                 :error-ranges (:invalid-nodes node)
-                 :on-update #(swap! state assoc :value %)})]
-     [:.pa2 {:style {:width "25%"}}
-      (map emit-node-with-decoration (.-children node))]
-     [:.pa2 {:style {:width "25%"}}
+     [:div.pa1
       (when-not (boolean (= emitted value))
         [:div
          [:div.red "(not= emitted input) \nemitted: \n" (prn-str emitted) "\nvalue: \n" (prn-str value)]
          (str "\n" emitted "\n")])
-      (interpose " " (map emit-node-structure (.-children node)))]]))
+
+      (interpose " " (map emit-node-structure (.-children node)))]
+
+     [:div.ph1
+      (CodeView {:value value
+                 :error-ranges (:invalid-nodes node)
+                 :on-update #(swap! state assoc :value %)})]]))
 
 (v/defview cards []
-  [:div.pa3
+  [:div
    {:style {:font-family "Menlo, Monaco, \"Courier New\", monospace"
             :font-size 12}}
    (->> ["\\"

@@ -67,7 +67,7 @@
 (defn take-printable-children
   [reader tag n]
   (rd/conj-children
-   (rd/EmptyNode tag)
+   (rd/StartingNode tag reader)
    reader
    {:read-fn parse-next
     :count-pred (complement printable-only?)
@@ -144,7 +144,7 @@
                          (-> (first (filter (complement printable-only?) children))
                              (.-tag)
                              (= first-printable-child-tag))))
-       (-> (rd/EmptyNode tag)
+       (-> (rd/StartingNode tag reader)
            (rd/assoc-children! children)
            (cond-> (seq after)
                    (rd/Splice after)))
