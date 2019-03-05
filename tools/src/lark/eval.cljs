@@ -164,7 +164,7 @@
                                                                   (mapped-cljs-position source-map)
                                                                   (relative-pos start-position))
                                                         nil))))
-(defonce cljs-cache (atom {}))
+(defonce evaluated-sources-by-filename (atom {}))
 
 (defn compile-str
   ([c-state c-env source] (compile-str c-state c-env source {}))
@@ -180,7 +180,7 @@
          result (atom nil)]
      (binding [*cljs-warning-handlers* [(partial warning-handler form source)]
                r/*data-readers* (conj r/*data-readers* {'js identity})]
-       (swap! cljs-cache assoc file-name source)
+       (swap! evaluated-sources-by-filename assoc file-name source)
        (cljs/compile-str c-state source file-name opts
                          (fn [{error                       :error
                                compiled-js-with-source-map :value}]
