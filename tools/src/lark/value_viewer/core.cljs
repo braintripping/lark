@@ -181,7 +181,7 @@
    (when (> depth 200)
      (prn value)
      (throw (js/Error. "Format depth too deep!")))
-   (cond (v/is-react-element? value) value
+   (cond (v/is-valid-element? value) value
          (satisfies? IView value) (format-value depth (view value))
          (satisfies? hiccup/IEmitHiccup value) value
          :else
@@ -204,7 +204,7 @@
                              (format-value depth (gobj/get value "state")))
 
            (cond
-             (v/is-react-element? value) value
+             (v/is-valid-element? value) value
              (instance? cljs.core/Namespace value) (str value)
              (instance? Deferred value) (display-deferred {:deferred value})
              :else (try (pr-str value)

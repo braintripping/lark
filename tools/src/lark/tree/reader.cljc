@@ -5,7 +5,7 @@
    [clojure.pprint :as pp]
    [chia.util.perf :as perf]
    #?@(:cljs [[cljs.tools.reader.reader-types :as r]
-              [chia.util.js-interop :as j]]
+              [applied-science.js-interop :as j]]
        :clj  [[clojure.tools.reader.reader-types :as r]])))
 
 (def ^:dynamic *invalid-nodes* nil)
@@ -59,8 +59,6 @@
   (perf/keyword-in?
    [:space :newline :tab :comma :cursor :selection]
    tag))
-
-
 
 (defn throw-reader
   "Throw reader exception, including line/column."
@@ -314,7 +312,7 @@
 (defn EmptyNode [tag]
   (->Node tag nil nil nil nil nil))
 
-(defn StartingNode [tag reader]
+(defn StartingNode [reader tag]
   (->Node tag
           nil
           [(dec (.-line reader))
@@ -426,7 +424,7 @@
   coll-node)
 
 (defn conj-children
-  [coll-node reader {:keys [read-fn
+  [reader coll-node {:keys [read-fn
                             count-pred]
                      take-n :take-n}]
   (loop [i 0
@@ -480,7 +478,9 @@
   [reader read-fn tag delimiter]
   (r/read-char reader)
   (binding [*delimiter* (cons delimiter *delimiter*)]
-    (conj-children (StartingNode tag reader) reader {:read-fn read-fn})))
+    (conj-children reader
+                   (StartingNode reader tag)
+                   {:read-fn read-fn})))
 
 (defn read-string-data
   [node reader]

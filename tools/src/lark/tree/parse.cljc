@@ -12,7 +12,7 @@
             #?@(:cljs
                 [[cljs.tools.reader.reader-types :as r]
                  [cljs.tools.reader.edn :as edn]
-                 [chia.util.js-interop :as j]])
+                 [applied-science.js-interop :as j]])
             #?@(:clj
                 [[clojure.tools.reader.reader-types :as r]
                  [clojure.tools.reader.edn :as edn]])
@@ -64,15 +64,6 @@
                        (.-tag n))
      (get (.-options n) :invalid?))))
 
-(defn take-printable-children
-  [reader tag n]
-  (rd/conj-children
-   (rd/StartingNode tag reader)
-   reader
-   {:read-fn parse-next
-    :count-pred (complement printable-only?)
-    :take-n n}))
-
 ;; -------------- from cljs.tools.reader.edn ------------------
 
 (defn- macro-terminating? [ch]
@@ -115,56 +106,49 @@
                         (js/isNaN))
               :token
               :number)]
-    (rd/ValueNode tag token)
-    ;; is it important to detect invalid tokens?
-    #_(try (let [[tag value] (let [value (edn/read-string token)]
-                               (if (symbol? value) [:symbol value]
-                                                   [:token token]))]
-             (prn [tag value])
-             (rd/ValueNode tag value))
-           (catch js/Error e
-             (rd/report-invalid!
-              (rd/->Node :token
-                         {:info {:tag (or (some-> (re-find #"symbol|number" (ex-message e))
-                                                  (keyword))
-                                          :token)}}
-                         nil
-                         token
-                         nil))))))
+    (rd/ValueNode tag token)))
+
+(defn take-printable-children
+  [reader tag n]
+  (rd/conj-children
+   reader
+    (rd/StartingNode reader tag)
+    {:read-fn parse-next
+     :count-pred (complement printable-only?)
+     :take-n n}))
+
+#_(defn take-n-children* [reader tag prefix n first-printable-child-tag]
+  (rd/conj-children reader
+    (rd/StartingNode reader tag)
+    {:read-fn parse-next
+     :count-pred (complement printable-only?)
+     :take-n n}))
 
 (defn take-n-children
-  ([reader tag prefix n] (take-n-children reader tag prefix n nil))
-  ([reader tag prefix n first-printable-child-tag]
-   (let [[line col] (rd/current-pos reader)
-         offset (rd/current-offset reader)
-         [valid? children after] (rd/take-children reader {:read-fn parse-next
-                                                           :count-pred (complement printable-only?)
-                                                           :take-n n})]
-     (if (and valid? (or (nil? first-printable-child-tag)
-                         (-> (first (filter (complement printable-only?) children))
-                             (.-tag)
-                             (= first-printable-child-tag))))
-       (-> (rd/StartingNode tag reader)
-           (rd/assoc-children! children)
-           (cond-> (seq after)
-                   (rd/Splice after)))
-       (rd/Splice
-        (rd/InvalidToken! tag prefix [line
-                                      (- col (count prefix))
-                                      line
-                                      col
-                                      (- offset (count prefix))
-                                      offset])
-        (into children after))))))
-
-#_(defn try-take-all-children [reader tag]
-    (let [[valid? children after :as result] (rd/take-children reader {:read-fn parse-next})]
-      (if valid?
-        (-> (rd/EmptyNode tag)
-            (assoc :children children)
-            (cond-> (seq after)
-                    (rd/Splice after)))
-        (into children after))))
+  [reader tag prefix n first-printable-child-tag]
+  (let [[line col] (rd/current-pos reader)
+        offset (rd/current-offset reader)
+        [valid? children after] (rd/take-children reader {:read-fn parse-next
+                                                          :count-pred (complement printable-only?)
+                                                          :take-n n})
+        invalid? (or (not valid?)
+                     (and first-printable-child-tag
+                          (-> (first (filter (complement printable-only?) children))
+                              (.-tag)
+                              (not= first-printable-child-tag))))]
+    (if invalid?
+      (rd/Splice
+       (rd/InvalidToken! tag prefix [line
+                                     (- col (count prefix))
+                                     line
+                                     col
+                                     (- offset (count prefix))
+                                     offset])
+       (into children after))
+      (-> (rd/StartingNode reader tag)
+          (rd/assoc-children! children)
+          (cond-> (seq after)
+                  (rd/Splice after))))))
 
 (defn parse-keyword
   [reader]
@@ -194,11 +178,11 @@
     "(" (take-n-children reader :fn "#" 1 :list)
     "\"" (take-n-children reader :regex "#" 1 :string)
     "^" (do (r/read-char reader)
-            (take-n-children reader :reader-meta "#^" 2))
+            (take-n-children reader :reader-meta "#^" 2 nil))
     "'" (do (r/read-char reader)
             (take-n-children reader :var "#'" 1 :token))
     "_" (do (r/read-char reader)
-            (take-n-children reader :uneval "#_" 1))
+            (take-n-children reader :uneval "#_" 1 nil))
     "?" (do
           (r/read-char reader)
           (let [ch (r/peek-char reader)]
@@ -261,8 +245,7 @@
 
       (:deref
        :quote
-       :syntax-quote) (do (r/read-char reader)
-                          (take-n-children reader tag c 1))
+       :syntax-quote) (take-n-children reader tag (r/read-char reader) 1 nil)
 
       :unquote (parse-unquote reader)
 
@@ -303,9 +286,9 @@
   [s]
   (binding [rd/*invalid-nodes* (volatile! [])]
     (let [reader (indexing-reader s)
-          base (rd/conj-children (rd/->Node :base nil nil nil nil nil)
-                                 reader
-                                 {:read-fn parse-next})]
+          base (rd/conj-children reader
+                 (rd/EmptyNode :base)
+                 {:read-fn parse-next})]
       (-> base
           (rd/assoc-range! [0 0
                             (dec (.-line reader))

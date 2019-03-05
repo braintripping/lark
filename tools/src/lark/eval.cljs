@@ -5,17 +5,16 @@
             [cljs.tools.reader.reader-types :as rt]
             [cljs.analyzer :as ana :refer [*cljs-warning-handlers*]]
             [shadow.cljs.bootstrap.browser :as boot]
-            [goog.object :as gobj]
             [clojure.string :as string]
             [goog.crypt.base64 :as base64]
-            [cljs.source-map :as sm])
+            [cljs.source-map :as sm]
+            [applied-science.js-interop :as j])
   (:require-macros [lark.eval :refer [defspecial]]))
 
 (def ^:dynamic *cljs-warnings* nil)
 
 (defonce c-state (cljs/empty-state))
 (defonce c-env (atom {:ns (symbol "cljs.user")}))
-
 (def repl-specials {})
 
 (defn swap-repl-specials!
@@ -51,8 +50,7 @@
 (defn var-value [the-var]
   (->> (string/split (:name the-var) #"[\./]")
        (map munge)
-       (to-array)
-       (apply gobj/getValueByKeys js/window)))
+       (j/get-in js/window)))
 
 (defn resolve-symbol
   ([sym] (resolve-symbol c-state c-env sym))

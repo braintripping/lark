@@ -2,14 +2,21 @@
   (:require lark.editors.codemirror
             ["codemirror" :as CM]
             ["codemirror/addon/search/searchcursor" :as search-cursor]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [chia.view.util :as vu]
+            [applied-science.js-interop :as j]))
 
+(defn get-el []
+  (-> (vu/find-or-append-element "lark-structure-test-utils" "div")
+      (j/assoc-in! [:style :height] "10px")
+      (j/assoc-in! [:style :overflow-y] "hidden")))
 
 (def editor
-  (memoize (fn ^js  []
-             (CM (doto (.createElement js/document "div")
+  (memoize (fn ^js []
+             (CM (doto (get-el)
                    (->> (.appendChild js/document.body))) (clj->js {:mode "clojure"
-                                                                    :magicBrackets true})))))
+                                                                    :magicBrackets true
+                                                                    :style {:height 10}})))))
 
 (defn regex-replace [^js cm pattern replace-f]
   (let [search-cursor (.getSearchCursor cm pattern (CM/Pos 0 0) true)]

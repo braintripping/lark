@@ -4,7 +4,7 @@
             [lark.editor :as editor]
             [lark.editors.codemirror :as cm]
             ["codemirror" :as CM]
-            [chia.util.js-interop :as j]
+            [applied-science.js-interop :as j]
             [clojure.spec.alpha :as s]))
 
 #_(def options

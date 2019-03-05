@@ -29,6 +29,10 @@
         emitted (:string node)]
     [:div.bb.b--near-white.pa3
      {:style {:white-space "pre-wrap"}}
+     [:div.ph1
+      (CodeView {:value value
+                 :error-ranges (:invalid-nodes node)
+                 :on-update #(swap! state assoc :value %)})]
      [:div.pa1
       (when-not (boolean (= emitted value))
         [:div
@@ -37,10 +41,7 @@
 
       (interpose " " (map emit-node-structure (.-children node)))]
 
-     [:div.ph1
-      (CodeView {:value value
-                 :error-ranges (:invalid-nodes node)
-                 :on-update #(swap! state assoc :value %)})]]))
+     ]))
 
 (v/defview cards []
   [:div

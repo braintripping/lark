@@ -8,6 +8,7 @@
                                                 lark.tree.parse-test
                                                 lark.tree.cursor-test
                                                 lark.structure.edit-test]}}
+                    :compiler-options {:static-fns false}
                     :release {:compiler-options {:optimizations :simple}}
                     :devtools {:after-load lark.cards.core/render
                                :http-root "public"
@@ -16,6 +17,7 @@
           :test {:target :browser-test
                  ;:ns-regexp "format-test$"
                  :test-dir "public/test"
+                 :compiler-options {:static-fns false}
                  :release {:compiler-options {:optimizations :simple}}
                  :devtools {:http-port 8021
                             :http-root "public/test"}}}}
