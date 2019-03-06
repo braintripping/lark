@@ -10,18 +10,16 @@
             [goog.dom.Range :as Range]
             [clojure.string :as string]
             [lark.tree.nav :as nav]
-            [lark.tree.parse :as parse]
             [lark.tree.node :as node]
             [clojure.string :as str]
             [lark.tree.format :as format]
-            [lark.tree.node :as n]
             [lark.tree.emit :as emit]
             [lark.tree.reader :as r])
   (:require-macros [lark.structure.edit :as edit :refer [operation]]))
 
 (defn format!
   ([editor] (format! editor {}))
-  ([editor {:keys [preserve-cursor-space?]}]
+  ([^js editor {:keys [preserve-cursor-space?]}]
    (let [source (.getValue editor)
          zipper (tree/string-zip source)
          pos (cm/pos->boundary (cm/get-cursor editor))
@@ -49,7 +47,7 @@
                 ast/cursor-pos]} (tree/format-ast ast)
         new-zipper (tree/ast-zip new-ast)]
 
-    (when (not= string (.getValue editor))                          ;; only mutate editor if value has changed
+    (when (not= string (.getValue editor))                  ;; only mutate editor if value has changed
       (.setValue editor string))
 
     (some->> cursor-pos
@@ -66,13 +64,14 @@
 (defn spaces [n] (apply str (take n (repeat " "))))
 
 (def clipboard-helper-element
-  (memoize (fn []
-             (let [textarea (doto (dom/createElement "pre")
-                              (dom/setProperties #js {:id "lark-tree-pasteHelper"
-                                                      :contentEditable true
-                                                      :className "fixed o-0 z-0 bottom-0 right-0"}))]
-               (dom/appendChild js/document.body textarea)
-               textarea))))
+  (memoize
+   (fn []
+     (let [textarea (doto (dom/createElement "pre")
+                      (dom/setProperties #js {:id "lark-tree-pasteHelper"
+                                              :contentEditable true
+                                              :className "fixed o-0 z-0 bottom-0 right-0"}))]
+       (dom/appendChild js/document.body textarea)
+       textarea))))
 
 (defn copy
   "Copy text to clipboard using a hidden input element."
@@ -423,32 +422,23 @@
   (fn [{{:keys [loc pos]} :magic/cursor
         :as cm}]
     (let [end-edge-loc (slurp-parent loc pos)
+          end-edge-node (z/node end-edge-loc)
           start-edge-loc (nav/include-prefix-parents end-edge-loc)
-          {:keys [tag] :as node} (z/node start-edge-loc)]
-      (when (and node (not= :base tag))
-        (let [right-bracket (second (node/edges (z/node end-edge-loc)))
-              last-child (some->> (z/children end-edge-loc)
-                                  (remove node/whitespace?)
-                                  (last))]
-          (when-let [next-form (some->> (z/rights start-edge-loc)
-                                        (remove node/whitespace?)
-                                        first)]
-            (let [form-content (emit/string next-form)
-                  replace-start (if last-child (range/bounds last-child :right)
-                                               (-> (z/node end-edge-loc)
-                                                   (range/inner-range)
-                                                   (range/bounds :right)))
-                  replace-end (select-keys next-form [:end-line :end-column])
-                  pad-start (and last-child
-                                 (or (not (boundary? (first form-content)))
-                                     (not (boundary? (last (emit/string last-child))))))
-                  cur (.getCursor cm)]
-              (cm/replace-range! cm (str
-                                     (when pad-start " ")
-                                     form-content
-                                     right-bracket)
-                                 (merge replace-start replace-end))
-              (.setCursor cm cur))))))
+          start-edge-node (z/node start-edge-loc)]
+      (when (and start-edge-node
+                 (not= :base (:tag start-edge-node)))
+        (when-let [next-form (some->> (z/rights start-edge-loc)
+                                      (remove node/whitespace?)
+                                      first)]
+          (let [form-content (-> start-edge-node
+                                 (update :children conj next-form)
+                                 (tree/format-ast)
+                                 :string)
+                range (merge (range/bounds end-edge-node :left)
+                             (select-keys next-form [:end-line :end-column]))
+                cur (.getCursor cm)]
+            (cm/replace-range! cm form-content range)
+            (.setCursor cm cur)))))
     true))
 
 (def unslurp-forward

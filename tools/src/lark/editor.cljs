@@ -23,9 +23,6 @@
   (some-> (view block)
           (get-editor)))
 
-(defprotocol IKind
-  (kind [this]))
-
 (defprotocol IHistory
   (get-selections [this])
   (put-selections! [this selections]))

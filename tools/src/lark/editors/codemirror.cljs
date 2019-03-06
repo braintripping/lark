@@ -381,11 +381,7 @@
     (swap! this assoc :ast val)
     (update-ast! this))
 
-  Editor/IKind
-  (kind [this] :code)
-
   Editor/IHistory
-
   (get-selections [cm]
     (if-let [root-cursor (temp-marker-cursor-pos cm)]
       #js [#js {:anchor root-cursor
