@@ -4,7 +4,8 @@
             [chia.view :as v]
             [lark.tree.emit :as emit]
             [lark.tree.node :as node]
-            [lark.tree.parse :as parse]))
+            [lark.tree.parse :as parse]
+            [chia.view.hooks :as hooks]))
 
 (defn emit-node-structure
   [node]
@@ -20,11 +21,11 @@
                          (mapv emit-node-structure (.-children node)))))
           (conj \])))))
 
-(vlegacy/defview show-parse
-  {:key (comp first :view/children identity)
-   :view/initial-state (fn [_ _ s] {:value s})}
-  [{:keys [view/state]}]
-  (let [value (:value @state)
+(v/defn show-parse
+  {:key identity}
+  [s]
+  (let [state (hooks/use-state {:value s})
+        value (:value @state)
         node (emit/materialize (parse/ast value))
         emitted (:string node)]
     [:div.bb.b--near-white.pa3
@@ -43,7 +44,7 @@
 
      ]))
 
-(vlegacy/defview cards []
+(v/defn cards []
   [:div
    {:style {:font-family "Menlo, Monaco, \"Courier New\", monospace"
             :font-size 12}}
@@ -103,5 +104,6 @@
          "#?@(:cljs (+ 1 1))"
          "#?(:cljs 1 :cljs 2)"
          "#?(:clj 1 :cljs 2)"
-         "#?(:clj 1)"]
-        (map-indexed show-parse))])
+         "#?(:clj 1)"
+         "#js[]"]
+        (map show-parse))])
