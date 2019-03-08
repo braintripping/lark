@@ -176,7 +176,7 @@
           (tree/format-zip)
           (p)))
 
-(do 'cljs.core
+(comment 'cljs.core
     (deftest ^:dev/always emit-ast
       (doseq [s [""]]
         (let [dirty-ast (time (parse/ast s))

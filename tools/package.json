@@ -22,11 +22,11 @@
     "prosemirror-state": "^0.24.0",
     "prosemirror-transform": "^0.24.0",
     "prosemirror-view": "^0.24.0",
-    "react": "^16.6.0",
-    "react-dom": "^16.6.0",
+    "react": "^16.8.4",
+    "react-dom": "^16.8.4",
     "requirejs": "^2.3.5",
     "reset-jss": "^1.0.0",
-    "shadow-cljs": "^2.7.6",
+    "shadow-cljs": "^2.8.15",
     "unfetch": "^4.0.1"
   }
 }

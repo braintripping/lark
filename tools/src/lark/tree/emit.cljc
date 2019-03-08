@@ -129,10 +129,6 @@
         (let [node (nth children i)
               tag (.-tag node)
               more-siblings? (not (identical? i (dec children-count)))]
-          (prn :space? (add-space? last-tag tag)
-               last-tag
-               :<>
-               node)
           (if (and format/*pretty*
                    (add-space? last-tag tag))
             (recur i

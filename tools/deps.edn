@@ -2,5 +2,6 @@
          "test"]
  :deps {fast-zip {:mvn/version "0.7.0"}
         lark/backtick {:mvn/version "0.1.0"}
-        chia {:git/url "https://github.com/mhuebert/chia"
-              :sha "0ad9fa809c5607797c9592bec17d79f485ec5a87"}}}
+        chia {:local/root "../../chia"}}
+ :aliases {:ci {:extra-deps {chia {:git/url "https://github.com/mhuebert/chia"
+                                   :sha "0ad9fa809c5607797c9592bec17d79f485ec5a87"}}}}}
