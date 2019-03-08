@@ -86,11 +86,8 @@
                  (perf/unchecked-keyword-identical? :newline)))))
 
 (defn- add-space? [t1 t2]
-  (and (not (perf/unchecked-keyword-identical? :space t1))
-       (not (perf/unchecked-keyword-identical? :space t2))
-       (not (perf/unchecked-keyword-identical? :newline t1))
-       (not (perf/unchecked-keyword-identical? :newline t2))
-       (not (perf/unchecked-keyword-identical? :_ t1))))
+  (and (not (perf/keyword-in? [:space :newline :data-literal :_] t1))
+       (not (perf/keyword-in? [:space :newline] t2))))
 
 (def space-node (rd/ValueNode :space " "))
 
@@ -132,6 +129,10 @@
         (let [node (nth children i)
               tag (.-tag node)
               more-siblings? (not (identical? i (dec children-count)))]
+          (prn :space? (add-space? last-tag tag)
+               last-tag
+               :<>
+               node)
           (if (and format/*pretty*
                    (add-space? last-tag tag))
             (recur i
@@ -189,6 +190,7 @@
                                [(inc line) indent (assoc node :string (str \newline (format/spaces indent)))])
                              [(inc line) (dec (.-length value)) (assoc node :string value)])
                   :number (with-string line column node value)
+
                   :string (with-string-multiline line column node (str "\"" value "\""))
                   :keyword (with-string line column node (str (if (:resolve-ns? (.-options node)) "::" ":")
                                                               (some-> (namespace value) (str "/"))
@@ -197,6 +199,7 @@
 
                   (:symbol
                    :token
+                   :invalid-token
                    :comma
                    :unmatched-delimiter) (with-string line column node value)
 
@@ -236,7 +239,8 @@
                    :var
                    :regex
                    :meta
-                   :reader-meta) (with-children*)
+                   :reader-meta
+                   :data-literal) (with-children*)
                   :namespaced-map (with-children line column opts node [(get (.-options node) :prefix)])
                   nil)]
        [end-line end-column
@@ -274,6 +278,9 @@
           :unmatched-delimiter ::INVALID_TOKEN
 
           :deref (template (deref ~(first (as-code children))))
+
+          ;; TODO
+          ;; data literals
 
           (:token
            :number) (try (edn/read-string value)

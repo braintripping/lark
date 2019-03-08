@@ -53,6 +53,7 @@
     :reader-conditional ["#?"]
     :reader-conditional-splice ["#?@"]
     :selection [\‹ \›]
+    :data-literal ["#"]
     nil))
 
 (defn whitespace-tag? [tag]

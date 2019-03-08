@@ -212,9 +212,10 @@
                 :else
                 (-> (take-n-children reader :namespaced-map prefix 1 :map)
                     (assoc :options options))))
+    (take-n-children reader :data-literal "#" 1 :token)
     ;; TODO
     ;; namespaced maps
-    (rd/InvalidToken! :reader-macro "#")
+    #_(rd/InvalidToken! :reader-macro "#")
     #_(take-printable-children reader :reader-macro 2)))
 
 (defn parse-unquote
