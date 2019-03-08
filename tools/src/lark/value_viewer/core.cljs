@@ -1,6 +1,7 @@
 (ns lark.value-viewer.core
   (:require [goog.object :as gobj]
             [chia.view :as v]
+            [chia.view.legacy :as vlegacy]
             [chia.view.hiccup :as hiccup])
   (:import [goog.async Deferred]))
 
@@ -54,7 +55,7 @@
 
 (declare format-value)
 
-(v/defview display-deferred
+(vlegacy/defview display-deferred
   {:view/did-mount (fn [{:keys [deferred view/state]}]
                      (-> deferred
                          (.addCallback #(swap! state assoc :value %1))
@@ -103,7 +104,7 @@
 (defn map-with-keys [& args]
   (ensure-keys (apply clojure.core/map args)))
 
-(v/defview format-collection
+(vlegacy/defview format-collection
   {:view/initial-state {:limit-n 20
                         :collection-expanded? nil}}
   [{state :view/state :as this} depth value]
@@ -127,7 +128,7 @@
           :else [:.inline-flex.items-center.gray.nowrap
                  {:class hover-class} (toggle-depth this depth (str space lb "…" rb space))])))
 
-(v/defview format-map
+(vlegacy/defview format-map
   {:view/initial-state {:limit-n 20
                         :collection-expanded? nil}}
   [{state :view/state :as this} depth value]
@@ -157,7 +158,7 @@
       [:.inline-flex.items-center.gray
        {:class hover-class} (toggle-depth this depth (str space lb "…" rb space))])))
 
-(v/defview format-function
+(vlegacy/defview format-function
   {:view/initial-state (fn [_ value] {:expanded? false})}
   [{:keys [view/state]} value]
   (let [{:keys [expanded?]} @state
@@ -181,7 +182,7 @@
    (when (> depth 200)
      (prn value)
      (throw (js/Error. "Format depth too deep!")))
-   (cond (v/is-valid-element? value) value
+   (cond (v/element? value) value
          (satisfies? IView value) (format-value depth (view value))
          (satisfies? hiccup/IEmitHiccup value) value
          :else
@@ -204,7 +205,7 @@
                              (format-value depth (gobj/get value "state")))
 
            (cond
-             (v/is-valid-element? value) value
+             (v/element? value) value
              (instance? cljs.core/Namespace value) (str value)
              (instance? Deferred value) (display-deferred {:deferred value})
              :else (try (pr-str value)

@@ -1,6 +1,7 @@
 (ns lark.cards.editor
   (:refer-clojure :exclude [require])
   (:require [chia.view :as v]
+            [chia.view.legacy :as vlegacy]
             [lark.editor :as editor]
             [lark.editors.codemirror :as cm]
             ["codemirror" :as CM]
@@ -30,7 +31,7 @@
 (defn reset-value [^js editor next-value]
   (cm/set-value-and-refresh! editor next-value #_(or value default-value)))
 
-(v/defview CodeView
+(vlegacy/defview CodeView
   {:spec/props (s/keys
                 :opt [:event/mousedown
                       :event/keydown]
@@ -43,7 +44,7 @@
                                 view/state
                                 error-ranges]
                          :as this}]
-                     (let [dom-node (v/dom-node this)
+                     (let [dom-node (vlegacy/dom-node this)
                            ^js cm-editor (CM dom-node
                                              (clj->js {:value (str (or value default-value))
                                                        :theme "maria-light"
@@ -93,7 +94,7 @@
     :as this}]
   [:.cursor-text])
 
-(v/extend-view CodeView
+(vlegacy/extend-view CodeView
   editor/IEditor
   (get-editor [this] (-> this
                          :view/state

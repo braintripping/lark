@@ -3,4 +3,4 @@
  :deps {fast-zip {:mvn/version "0.7.0"}
         lark/backtick {:mvn/version "0.1.0"}
         chia {:git/url "https://github.com/mhuebert/chia"
-              :sha "c707f276cad0ef74d29297b5b13a37bd2d2c75c7"}}}
+              :sha "0ad9fa809c5607797c9592bec17d79f485ec5a87"}}}

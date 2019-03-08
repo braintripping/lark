@@ -20,7 +20,7 @@
                          (mapv emit-node-structure (.-children node)))))
           (conj \])))))
 
-(v/defview show-parse
+(vlegacy/defview show-parse
   {:key (comp first :view/children identity)
    :view/initial-state (fn [_ _ s] {:value s})}
   [{:keys [view/state]}]
@@ -43,7 +43,7 @@
 
      ]))
 
-(v/defview cards []
+(vlegacy/defview cards []
   [:div
    {:style {:font-family "Menlo, Monaco, \"Courier New\", monospace"
             :font-size 12}}
