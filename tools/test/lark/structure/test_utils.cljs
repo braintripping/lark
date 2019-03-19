@@ -48,8 +48,9 @@
                                         (subs text 1 (dec (count text))))))
   cm)
 
+
 (defn serialize-selections!
-  [^js cm]
+  [cm]
   (replace-selections cm (fn [{:keys [text]}]
                            (if (= text "")
                              "|"

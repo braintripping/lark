@@ -1,7 +1,17 @@
-{:paths ["src"
-         "test"]
- :deps {fast-zip {:mvn/version "0.7.0"}
+{:paths ["src"]
+ :deps {org.clojure/clojure {:mvn/version "1.10.0"}
+        org.clojure/clojurescript {:mvn/version "1.10.520"}
+        fast-zip {:mvn/version "0.7.0"}
         lark/backtick {:mvn/version "0.1.0"}
+        mhuebert/cljs-static {:local/root "../../cljs-static"}
+        appliedscience/js-interop {:local/root "../../js-interop"}
         chia {:local/root "../../chia"}}
- :aliases {:ci {:extra-deps {chia {:git/url "https://github.com/mhuebert/chia"
-                                   :sha "0ad9fa809c5607797c9592bec17d79f485ec5a87"}}}}}
+ :aliases {:test
+           {:extra-paths ["test"]}
+           :ci
+           {:override-deps
+            {appliedscience/js-interop {:mvn/version "0.1.13"}
+             mhuebert/cljs-static {:git/url "https://github.com/mhuebert/cljs-static"
+                                   :sha "9b71dafc6bb1cb43115b1a9a3e020cb8b1259ac4"}
+             chia {:git/url "https://github.com/mhuebert/chia"
+                   :sha "0ad9fa809c5607797c9592bec17d79f485ec5a87"}}}}}

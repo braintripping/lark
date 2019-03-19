@@ -8,12 +8,27 @@
       (and (= (:line pos1) (:line pos2))
            (< (:column pos1) (:column pos2)))))
 
+(defn lt= [pos1 pos2]
+  (or (< (:line pos1) (:line pos2))
+      (and (= (:line pos1) (:line pos2))
+           (<= (:column pos1) (:column pos2)))))
+
+(defn gt [pos1 pos2]
+  (or (> (:line pos1) (:line pos2))
+      (and (= (:line pos1) (:line pos2))
+           (> (:column pos1) (:column pos2)))))
+
+(defn gt= [pos1 pos2]
+  (or (> (:line pos1) (:line pos2))
+      (and (= (:line pos1) (:line pos2))
+           (>= (:column pos1) (:column pos2)))))
+
 (comment
-  (assert (lt {:line 0 :column 0} {:line 0 :column 1}))
-  (assert (lt {:line 0 :column 0} {:line 1 :column 0}))
-  (assert (not (lt {:line 0 :column 1} {:line 0 :column 0})))
-  (assert (not (lt {:line 1 :column 0} {:line 0 :column 0})))
-  (assert (not (lt {:line 0 :column 0} {:line 0 :column 0}))))
+ (assert (lt {:line 0 :column 0} {:line 0 :column 1}))
+ (assert (lt {:line 0 :column 0} {:line 1 :column 0}))
+ (assert (not (lt {:line 0 :column 1} {:line 0 :column 0})))
+ (assert (not (lt {:line 1 :column 0} {:line 0 :column 0})))
+ (assert (not (lt {:line 0 :column 0} {:line 0 :column 0}))))
 
 (defn contains-fn [include-edges?]
   (let [[greater-than less-than] (case include-edges?
@@ -25,8 +40,8 @@
              (within? (z/node container) pos)
              (let [{pos-line :line pos-column :column} pos
                    {end-pos-line :end-line end-pos-column :end-column
-                    :or          {end-pos-line   pos-line
-                                  end-pos-column pos-column}} pos
+                    :or {end-pos-line pos-line
+                         end-pos-column pos-column}} pos
                    {:keys [line column end-line end-column]} container]
                (and (>= pos-line line)
                     (<= end-pos-line end-line)
@@ -36,22 +51,37 @@
 (def within? (contains-fn true))
 (def within-inner? (contains-fn false))
 
+(defn bounds
+  "Returns position map for left or right boundary of the node."
+  ([node] (select-keys node [:line :column :end-line :end-column]))
+  ([node side]
+   (case side :left (select-keys node [:line :column])
+              :right (if (contains? node :end-line)
+                       {:line (:end-line node)
+                        :column (:end-column node)}
+                       (bounds node :left)))))
+
 (defn edge-ranges [node]
   (when (n/has-edges? node)
     (let [[left right] (rd/edges (.-tag node))]
       (cond-> []
-              left (conj {:line       (:line node) :end-line (:line node)
-                          :column     (:column node)
+              left (conj {:line (:line node) :end-line (:line node)
+                          :column (:column node)
                           :end-column (+ (:column node) (count left))})
-              right (conj {:line       (:end-line node) :end-line (:end-line node)
-                           :column     (- (:end-column node) (count right))
+              right (conj {:line (:end-line node) :end-line (:end-line node)
+                           :column (- (:end-column node) (count right))
                            :end-column (:end-column node)})))))
+
+(defn inner-left [node]
+  (let [left-edge (rd/edges (.-tag node))]
+    (cond-> (bounds node :left)
+            left-edge (update :column + (count left-edge)))))
 
 (defn inner-range [{:keys [line column end-line end-column] :as node}]
   (if-let [[left right] (rd/edges (.-tag node))]
-    {:line       line
-     :column     (+ column (count left))
-     :end-line   end-line
+    {:line line
+     :column (+ column (count left))
+     :end-line end-line
      :end-column (- end-column (count right))}
     node))
 
@@ -60,17 +90,6 @@
 
 (defn end [{:keys [end-line end-column]}]
   {:line end-line :column end-column})
-
-(defn bounds
-  "Returns position map for left or right boundary of the node."
-  ([node] (select-keys node [:line :column :end-line :end-column]))
-  ([node side]
-   (case side :left {:line (get node :line)
-                     :column (get node :column)}
-              :right (if-let [end-line (:end-line node)]
-                       {:line   end-line
-                        :column (:end-column node)}
-                       (bounds node :left)))))
 
 (defn range= [p1 p2]
   (= (bounds p1)

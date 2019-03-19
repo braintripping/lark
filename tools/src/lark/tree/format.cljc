@@ -2,13 +2,11 @@
   (:require [clojure.string :as str]
             [lark.tree.reader :as rd]
             [lark.tree.node :as n]
-            [lark.tree.nav :as nav]
-            [fast-zip.core :as z]
-            [chia.util.perf :as perf]
-            [cljs.pprint :as pp]))
+            [chia.util.perf :as perf]))
 
 (def ^:dynamic *pretty* false)
 (def ^:dynamic *cursor* nil)
+(def ^:dynamic *selections* nil)
 
 (def SPACES (reduce #(perf/str %1 " ") "" (range 500)))
 
@@ -59,10 +57,6 @@
                 ;(str/ends-with? x "->") 1
                 :else FUNCTION_INDENT))))
 
-(defn butlast-vec [v]
-  (cond-> v
-          (not (empty? v)) (pop)))
-
 (defn body-indent
   [{:keys [parent
            parent-op
@@ -87,7 +81,7 @@
                                      threading-form (dec)))
                   split-after (+ 2 indent-offset)
                   [exact? taken _ num-passed] (->> (cond-> siblings
-                                                           (n/whitespace? operator) (butlast-vec))
+                                                           (n/whitespace? operator) (perf/butlastv))
                                                    (rd/split-after-n split-after
                                                                      n/sexp?
                                                                      (fn [node]
@@ -96,17 +90,3 @@
                     (and (identical? num-passed 1)
                          (not threading-form)) inner-column
                     :else (inc inner-column)))))))))
-
-(defn whitespace-tag? [t]
-  (perf/keyword-in? [:space :cursor :selection :tab :newline]
-                    t))
-
-(defn pad-chars?
-  "Returns true if space should be left inbetween characters c1 and c2."
-  [c1 c2]
-  (if (or (rd/close-bracket? c2)
-          (rd/open-bracket? c1)
-          (rd/prefix-boundary? c1)
-          (identical? \# c1))
-    false
-    true))

@@ -178,7 +178,7 @@
     "(" (take-n-children reader :fn "#" 1 :list)
     "\"" (take-n-children reader :regex "#" 1 :string)
     "^" (do (r/read-char reader)
-            (take-n-children reader :reader-meta "#^" 2 nil))
+            (take-n-children reader :reader-meta "#^" 1 nil))
     "'" (do (r/read-char reader)
             (take-n-children reader :var "#'" 1 :token))
     "_" (do (r/read-char reader)
@@ -313,3 +313,5 @@
                                    (recur (inc i)
                                           (assoc! children i
                                                   (rd/assoc-string! node (subs s (:offset node) (:end-offset node))))))))))))))
+
+

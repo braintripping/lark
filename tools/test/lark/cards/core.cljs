@@ -1,14 +1,15 @@
 (ns lark.cards.core
   (:require [chia.view :as v]
             [lark.cards.parse :as parse]
-            [lark.cards.structure :as structure]
+            [lark.cards.structure.operation]
+            [lark.cards.structure.view :as structure-view]
             [chia.view.hooks :as hooks]))
 
-(def pages {:structure [structure/structure]
+(def pages {:structure [structure-view/view-samples]
             :parse [parse/cards]})
 
 (v/defn index []
-  (let [tab (hooks/use-state :structure)]
+  (let [tab (hooks/use-atom :structure)]
     [:div (for [k (keys pages)]
             [:div {:style {:display "inline-block"}
                    :on-click #(reset! tab k)} (name k)])]

@@ -58,7 +58,15 @@
 
 (defn whitespace-tag? [tag]
   (perf/keyword-in?
-   [:space :newline :tab :comma :cursor :selection]
+   [:space
+    :newline
+    :tab
+    :comma
+    :cursor
+    :selection
+    :selection/cursor
+    :selection/start
+    :selection/end]
    tag))
 
 (defn throw-reader
@@ -230,6 +238,10 @@
               :children children
               :range range
               :string string
+
+              :coords/from (subvec range 0 2)
+              :coords/to (subvec range 2 4)
+
               :line (nth range 0)
               :column (nth range 1)
               :end-line (nth range 2)
@@ -250,11 +262,11 @@
   IPrintWithWriter
   (-pr-writer [o writer _]
     (let [options (dissoc options :string :invalid-nodes :cursor)]
-      (-write writer (str (cond-> [tag]
+      (-write writer (str (cond-> [(str "🥚" (name tag))]
                                   range (conj range)
                                   (seq options) (conj options)
                                   (not (seq children)) (conj (subs (str value) 0 10))
-                                  children (conj (str "..." (count children)))) ">")))))
+                                  children (conj (str "…" (map :tag children) "…"))))))))
 
 (defn delimiter-error [tag reader]
   (let [[line col] (position reader)]

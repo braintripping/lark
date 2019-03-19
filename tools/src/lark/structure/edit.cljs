@@ -221,9 +221,6 @@
         (set-editor-cursor! a-pointer))))
   true)
 
-(range/within? {:line 0, :column 1, :end-line 0, :end-column 22}
-               {:line 0, :column 13})
-
 (def kill!
   (fn [{{pos :pos} :magic/cursor
         zipper :zipper :as editor}]

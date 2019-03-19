@@ -226,8 +226,6 @@
     (range/inner-range node)
     node))
 
-
-
 (defn select-at-cursor [{{:keys [loc pos]} :magic/cursor :as cm} top-loc?]
   (when-let [cursor-loc (sexp-near pos loc {:direction :left})]
     (let [pos (get-cursor cm)

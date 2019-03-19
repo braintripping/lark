@@ -22,7 +22,7 @@
   (every-pred (complement comment?)
               (complement whitespace?)))
 
-(defn terminal-node? [^rd/Node node]
+(defn terminal? [^rd/Node node]
   (let [tag (.-tag node)]
     (perf/keyword-in? [:space
                        :symbol
@@ -36,7 +36,7 @@
                        :comment-block
                        :unmatched-delimiter] tag)))
 
-(def may-contain-children? (complement terminal-node?))
+(def may-contain-children? (complement terminal?))
 
 (defn has-edges?
   "Returns true if node has 'edges' that mark boundaries. See unwrap/edges for details."
@@ -56,5 +56,5 @@
    (fn [node] (let [children (.-children node)]
                 (when-not (empty? children) children)))
    (fn [node children]
-     (assoc node :children children))
+     (assoc node :children (vec children)))
    ast))

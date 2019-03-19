@@ -3,10 +3,7 @@
   (:require [fast-zip.core :as z]
             [lark.tree.fn :refer [fn-walk]]
             [clojure.string :as str]
-            [clojure.pprint :as pp]
             [lark.tree.reader :as rd]
-            [lark.tree.node :as n]
-            [lark.tree.nav :as nav]
             [lark.tree.format :as format]
             [chia.util.perf :as perf]
             [chia.util :as u]
@@ -157,13 +154,21 @@
                      string-out
                      last-tag))))))))
 
+(defn report-selections! [tag node]
+  (case tag :cursor (vreset! format/*cursor* (select-keys node [:line
+                                                                :column]))
+            :selection (vswap! format/*selections* conj node)
+            nil))
+
 (defn materialize
   "Emit ClojureScript string from a magic-tree AST"
   ([node]
-   (binding [format/*cursor* (volatile! nil)]
+   (binding [format/*cursor* (volatile! nil)
+             format/*selections* (volatile! [])]
      (let [[line column node] (materialize 0 0 node nil nil nil)]
        (assoc node
-         :ast/cursor-pos @format/*cursor*))))
+         :ast/cursor-pos @format/*cursor*
+         :ast/selections @format/*selections*))))
   ([node {:as opts
           :keys [format]}]
    (binding [format/*pretty* (boolean format)]
@@ -171,76 +176,76 @@
   ([line column node opts prev-siblings more-siblings?]
    (let [tag (.-tag node)
          value (.-value node)
-         with-children* #(with-children line column opts node (rd/edges tag))]
-     (when-let [[end-line end-column node]
-                (case tag
-                  :space (if (and format/*pretty*
-                                  (not (rd/active-cursor-line? line)))
-                           (when (emit-space? prev-siblings more-siblings?)
-                             (with-string line column node " "))
-                           (with-string line column node value))
+         with-children* #(with-children line column opts node (rd/edges tag))
+         [end-line end-column node]
+         (case tag
+           :space (if (and format/*pretty*
+                           (not (rd/active-cursor-line? line)))
+                    (when (emit-space? prev-siblings more-siblings?)
+                      (with-string line column node " "))
+                    (with-string line column node value))
 
-                  :newline (if (and format/*pretty*
-                                    (not (rd/active-cursor-line? (inc line))))
-                             (let [indent (format/body-indent opts prev-siblings)]
-                               [(inc line) indent (assoc node :string (str \newline (format/spaces indent)))])
-                             [(inc line) (dec (.-length value)) (assoc node :string value)])
-                  :number (with-string line column node value)
+           :newline (if (and format/*pretty*
+                             (not (rd/active-cursor-line? (inc line))))
+                      (let [indent (format/body-indent opts prev-siblings)]
+                        [(inc line) indent (assoc node :string (str \newline (format/spaces indent)))])
+                      [(inc line) (dec (.-length value)) (assoc node :string value)])
+           :number (with-string line column node value)
 
-                  :string (with-string-multiline line column node (str "\"" value "\""))
-                  :keyword (with-string line column node (str (if (:resolve-ns? (.-options node)) "::" ":")
-                                                              (some-> (namespace value) (str "/"))
-                                                              (name value)))
-                  :error nil
+           :string (with-string-multiline line column node (str "\"" value "\""))
+           :keyword (with-string line column node (str (if (:resolve-ns? (.-options node)) "::" ":")
+                                                       (some-> (namespace value) (str "/"))
+                                                       (name value)))
+           :error nil
 
-                  (:symbol
-                   :token
-                   :invalid-token
-                   :comma
-                   :unmatched-delimiter) (with-string line column node value)
+           (:symbol
+            :token
+            :invalid-token
+            :comma
+            :unmatched-delimiter) (with-string line column node value)
 
-                  :comment (with-string line column node (str \; value))
+           :comment (with-string line column node (str \; value))
 
-                  :comment-block (with-string-multiline line column node (str/join (sequence (comp (map #(if (.test #"^\s*$" %)
-                                                                                                           %
-                                                                                                           (str ";; " %)))
-                                                                                                   (interpose "\n"))
-                                                                                             (str/split-lines value))))
+           :comment-block (with-string-multiline line column node (str/join (sequence (comp (map #(if (.test #"^\s*$" %)
+                                                                                                    %
+                                                                                                    (str ";; " %)))
+                                                                                            (interpose "\n"))
+                                                                                      (str/split-lines value))))
 
-                  :cursor (do (vreset! format/*cursor*
-                                       {:line line
-                                        :column column})
-                              (when *print-selections*
-                                (with-string line column node "|")))
+           :cursor (when *print-selections*
+                     (with-string line column node "|"))
 
-                  :selection (when *print-selections*
-                               (with-children*))
+           :selection (if *print-selections*
+                        (with-children*)
+                        (with-children line column opts node nil))
 
-                  ;:space moved above
-                  (:base
-                   :list
-                   :vector
-                   :map
-                   :deref
-                   :fn
-                   :quote
-                   :reader-macro
-                   :reader-conditional
-                   :reader-conditional-splice
-                   :set
-                   :syntax-quote
-                   :uneval
-                   :unquote
-                   :unquote-splicing
-                   :var
-                   :regex
-                   :meta
-                   :reader-meta
-                   :data-literal) (with-children*)
-                  :namespaced-map (with-children line column opts node [(get (.-options node) :prefix)])
-                  nil)]
-       [end-line end-column
-        (assoc node :range [line column end-line end-column])]))))
+           ;:space moved above
+           (:base
+            :list
+            :vector
+            :map
+            :deref
+            :fn
+            :quote
+            :reader-macro
+            :reader-conditional
+            :reader-conditional-splice
+            :set
+            :syntax-quote
+            :uneval
+            :unquote
+            :unquote-splicing
+            :var
+            :regex
+            :meta
+            :reader-meta
+            :data-literal) (with-children*)
+           :namespaced-map (with-children line column opts node [(get (.-options node) :prefix)])
+           nil)]
+     (when node
+       (let [node (assoc node :range [line column end-line end-column])]
+         (report-selections! tag node)
+         [end-line end-column node])))))
 
 (defn string [ast]
   (-> (cond-> ast

@@ -24,11 +24,11 @@
 
 (defn c-opts
   [c-state env]
-  {:load          (partial boot/load c-state)
-   :eval          cljs/js-eval
-   :ns            (:ns @env)
-   :context       :expr
-   :source-map    true
+  {:load (partial boot/load c-state)
+   :eval cljs/js-eval
+   :ns (:ns @env)
+   :context :expr
+   :source-map true
    :def-emits-var true})
 
 (defn get-ns [c-state ns] (get-in @c-state [:cljs.analyzer/namespaces ns]))
@@ -36,9 +36,9 @@
 (defn toggle-macros-ns [sym]
   (let [s (str sym)]
     (symbol
-      (if (string/ends-with? s "$macros")
-        (string/replace s "$macros" "")
-        (str s "$macros")))))
+     (if (string/ends-with? s "$macros")
+       (string/replace s "$macros" "")
+       (str s "$macros")))))
 
 (defn resolve-var
   ([sym]
@@ -108,11 +108,11 @@
     :line (dec line)
     :column (dec column)))
 
-(defn relative-pos [{target-line   :line
+(defn relative-pos [{target-line :line
                      target-column :column
-                     :as           target}
+                     :as target}
                     {start-line :line
-                     start-col  :column}]
+                     start-col :column}]
   (if-not start-line
     target
     (cond-> (update target :line + start-line)
@@ -124,20 +124,21 @@
   ;; note - not including `env` in warnings maps, because it is so large and can't be printed.
   ;;        also unsure of memory implications.
   (some-> *cljs-warnings*
-          (swap! conj {:type             warning-type
+          (swap! conj {:type warning-type
                        :warning-position (relative-pos (-> (select-keys env [:line :column])
                                                            (dec-pos))
                                                        (when (satisfies? IMeta form) (some-> (meta form)
                                                                                              (dec-pos))))
-                       :extra            extra
-                       :source           source
-                       :form             form})))
+                       :extra extra
+                       :source source
+                       :form form})))
 
 (defn stack-error-position [error]
-  (let [[line column] (->> (re-find #"<anonymous>:(\d+)(?::(\d+))" (.-stack error))
-                           (rest)
-                           (map js/parseInt))]
-    {:line   line
+  (let [[line column] (some->> (.-stack error)
+                               (re-find #"<anonymous>:(\d+)(?::(\d+))")
+                               (rest)
+                               (map js/parseInt))]
+    {:line line
      :column column}))
 
 (defn mapped-cljs-position [{:keys [line column]} source-map]
@@ -149,7 +150,7 @@
                                    (last)
                                    (second)
                                    (last))]
-    {:line   line
+    {:line line
      :column col}))
 
 (defn add-error-position [{:keys [error error/position error/kind start-position source-map] :as result}]
@@ -182,19 +183,19 @@
                r/*data-readers* (conj r/*data-readers* {'js identity})]
        (swap! evaluated-sources-by-filename assoc file-name source)
        (cljs/compile-str c-state source file-name opts
-                         (fn [{error                       :error
+                         (fn [{error :error
                                compiled-js-with-source-map :value}]
                            (let [[compiled-js source-map] (clojure.string/split compiled-js-with-source-map #"\n//#\ssourceURL[^;]+;base64,")]
 
-                             (->> {:source         source
-                                   :form           form
+                             (->> {:source source
+                                   :form form
                                    :start-position start-position}
                                   (merge (if error
-                                           {:error      error
+                                           {:error error
                                             :error/kind :compile}
                                            {:compiled-js compiled-js
-                                            :source-map  source-map
-                                            :env         @c-env}))
+                                            :source-map source-map
+                                            :env @c-env}))
                                   (add-error-position)
                                   (reset! result)))))
        @result))))
@@ -231,13 +232,13 @@
                                              r/*data-readers* (conj r/*data-readers* {'js identity})]
                                      (if source
                                        (let [{:keys [compiled-js
-                                                     error] :as result} (compile-str c-state c-env source {:form           form
-                                                                                                           :opts           opts
+                                                     error] :as result} (compile-str c-state c-env source {:form form
+                                                                                                           :opts opts
                                                                                                            :start-position start-position})]
                                          (cond-> result
                                                  (not error) (-> (merge (try {:value (binding [*ns* start-ns]
                                                                                        (js/eval compiled-js))}
-                                                                             (catch js/Error e {:error      e
+                                                                             (catch js/Error e {:error e
                                                                                                 :error/kind :eval})))
                                                                  (add-error-position))))
                                        (let [result (atom nil)]
@@ -283,7 +284,7 @@
             *ns* (:ns @c-env)]
     (try {:value (read-string-indexed src)}
          (catch js/Error e
-           {:error      e
+           {:error e
             :error/kind :reader}))))
 
 (defn eval-str

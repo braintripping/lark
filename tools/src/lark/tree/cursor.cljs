@@ -3,9 +3,7 @@
             [fast-zip.core :as z]
             [lark.tree.node :as n]
             [lark.tree.range :as range]
-            [lark.tree.reader :as r]
-            [lark.tree.util :as util]
-            [cljs.pprint :as pp]))
+            [lark.tree.util :as util]))
 
 (defn pos-offset [{node-line :line
                    node-col :column} {pos-line :line
@@ -47,7 +45,7 @@
                                             (range/pos= pos))
                                 [5 (z/up loc-at-pos) :inner-left])
                               (when (and (not (n/whitespace? node))
-                                         (n/terminal-node? node)
+                                         (n/terminal? node)
                                          (range/within? node pos))
                                 [6 loc-at-pos :terminal-offset (pos-offset node pos)])
                               (when (and (nil? (z/right loc-at-pos))

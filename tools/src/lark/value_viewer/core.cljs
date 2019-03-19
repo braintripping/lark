@@ -49,9 +49,9 @@
    [:div.v-top value]
    [:.flex.items-end.nowrap rb]])
 
-(extend-protocol hiccup/IEmitHiccup
+(extend-protocol hiccup/IElement
   Keyword
-  (to-hiccup [this] (str this)))
+  (to-element [this] (str this)))
 
 (declare format-value)
 
@@ -175,16 +175,17 @@
 (defprotocol IView
   (view [this] "Returns a view for `this`"))
 
-(defn format-value
+(v/defn format-value
   ([value] (format-value 1 value))
   ([depth value]
-
    (when (> depth 200)
      (prn value)
      (throw (js/Error. "Format depth too deep!")))
    (cond (v/element? value) value
+         (or (satisfies? hiccup/IElement value)
+             (and (vector? value)
+                  (:hiccup (meta value)))) (hiccup/to-element value)
          (satisfies? IView value) (format-value depth (view value))
-         (satisfies? hiccup/IEmitHiccup value) value
          :else
          (case (kind value)
            (:vector

@@ -1,6 +1,6 @@
 (ns lark.cards.parse
   (:require [lark.tree.core :as t]
-            [lark.cards.editor :as editor :refer [CodeView]]
+            [lark.cards.editor :as editor]
             [chia.view :as v]
             [lark.tree.emit :as emit]
             [lark.tree.node :as node]
@@ -24,14 +24,14 @@
 (v/defn show-parse
   {:key identity}
   [s]
-  (let [state (hooks/use-state {:value s})
+  (let [state (hooks/use-atom {:value s})
         value (:value @state)
         node (emit/materialize (parse/ast value))
         emitted (:string node)]
     [:div.bb.b--near-white.pa3
      {:style {:white-space "pre-wrap"}}
      [:div.ph1
-      (CodeView {:value value
+      (editor/CodeView {:value value
                  :error-ranges (:invalid-nodes node)
                  :on-update #(swap! state assoc :value %)})]
      [:div.pa1
@@ -106,4 +106,5 @@
          "#?(:clj 1 :cljs 2)"
          "#?(:clj 1)"
          "#js[]"]
+
         (map show-parse))])

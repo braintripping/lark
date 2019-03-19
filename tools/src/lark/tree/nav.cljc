@@ -65,14 +65,6 @@
       (some-> (z/up loc)
               (include-prefix-parents))))
 
-(defn before? [pos1 pos2]
-  (and (<= (get pos1 :line) (get pos2 :line))
-       (< (get pos1 :column) (get pos2 :column))))
-
-(defn after? [pos1 pos2]
-  (and (>= (get pos1 :line) (get pos2 :line))
-       (> (get pos1 :column) (get pos2 :column))))
-
 (defn navigate
   "Navigate to a position within a zipper (returns loc) or ast (returns node)."
   [ast pos]
@@ -83,7 +75,7 @@
           children (.-children node)
           found (when (range/within? node pos)
                   (if
-                   (or (n/terminal-node? node)
+                   (or (n/terminal? node)
                        (empty? children))
                     loc
                     (or
@@ -98,7 +90,7 @@
         found))
     (when (range/within? ast pos)
       (if
-       (or (n/terminal-node? ast)
+       (or (n/terminal? ast)
            (empty? (get ast :children)))
         ast
         (or (some-> (filter #(range/within? % pos) (get ast :children))

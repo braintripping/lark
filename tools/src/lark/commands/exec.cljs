@@ -2,7 +2,7 @@
   (:require [lark.commands.registry :as registry]
             [clojure.set :as set]))
 
-(def debug? true)
+(def debug? false )
 (defonce context (volatile! {}))
 (defonce last-selections (volatile! (list)))
 (def which-key-time 1000)
