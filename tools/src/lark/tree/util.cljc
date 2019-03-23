@@ -5,9 +5,8 @@
 ;; Successive `identical?` comparisons are _significantly_ faster than idiomatic alternatives such as `(contains? #{:k1 :k2} the-keyword)`,
 ;; results in a 2x overall speedup in parse/ast.
 
-(defn some-str [s]
-  (when (and (string? s) (not (identical? s "")))
-    s))
+(defn update-last [v f & args]
+  (apply update v (dec (count v)) f args))
 
 (defn guard-> [x f]
   (when (f x) x))

@@ -23,6 +23,7 @@
               (complement whitespace?)))
 
 (defn terminal? [^rd/Node node]
+  (assert (instance? rd/Node node))
   (let [tag (.-tag node)]
     (perf/keyword-in? [:space
                        :symbol
@@ -51,6 +52,7 @@
 (defn ast-zip
   "Given AST, returns zipper"
   [ast]
+  (assert (instance? rd/Node ast))
   (z/zipper
    may-contain-children?
    (fn [node] (let [children (.-children node)]

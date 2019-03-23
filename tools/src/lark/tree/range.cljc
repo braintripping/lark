@@ -1,7 +1,20 @@
 (ns lark.tree.range
   (:require [lark.tree.node :as n]
             [lark.tree.reader :as rd]
+            [cljs.spec.alpha :as s]
+            [spell-spec.alpha :as ss]
             [fast-zip.core :as z]))
+
+(s/def ::line number?)
+(s/def ::column number?)
+(s/def ::end-line number?)
+(s/def ::end-column number?)
+
+(s/def ::range
+  (ss/strict-keys :opt-un [::line
+                           ::column
+                           ::end-line
+                           ::end-column]))
 
 (defn lt [pos1 pos2]
   (or (< (:line pos1) (:line pos2))
@@ -60,6 +73,11 @@
                        {:line (:end-line node)
                         :column (:end-column node)}
                        (bounds node :left)))))
+
+(defn point? [{:keys [from to]}]
+  (or (nil? to)
+      (= (bounds from :left)
+         (bounds to :left))))
 
 (defn edge-ranges [node]
   (when (n/has-edges? node)

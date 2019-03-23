@@ -7,7 +7,9 @@
         appliedscience/js-interop {:local/root "../../js-interop"}
         chia {:local/root "../../chia"}}
  :aliases {:test
-           {:extra-paths ["test"]}
+           {:extra-paths ["test"]
+            :extra-deps {expound {:mvn/version "0.7.2"}
+                         com.bhauman/spell-spec {:mvn/version "0.1.1"}}}
            :ci
            {:override-deps
             {appliedscience/js-interop {:mvn/version "0.1.13"}

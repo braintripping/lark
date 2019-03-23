@@ -1,6 +1,7 @@
 (ns lark.cards.structure.serialize-selections
-  (:require [lark.cards.structure.core :as structure]))
-
+  "For representing cursors, |, and selections, <>."
+  (:require [lark.cards.structure.string :as string]
+            [lark.tree.range :as range]))
 
 (defn in-selection! [selections]
   (assert (:open? (last selections))
@@ -17,31 +18,34 @@
          source ""
          line 0
          column 0
-         selections []]
+         ranges []]
     (if-not segments
       {:source source
-       :ranges selections}
+       :ranges ranges}
       (let [text (first segments)]
         (case text
-          "|" (do (not-in-selection! selections)
-                  (recur (next segments) source line column (conj selections {:line line :column column})))
-          "<" (do (not-in-selection! selections)
-                  (recur (next segments) source line column (conj selections {:line line :column column :open? true})))
-          ">" (do (in-selection! selections)
-                  (recur (next segments) source line column (update selections (dec (count selections)) assoc :end-line line :end-column column :open? false)))
-          "\n" (recur (next segments) (str source text) (inc line) 0 selections)
-          (recur (next segments) (str source text) line (+ column (count text)) selections))))))
+          "|" (do (not-in-selection! ranges)
+                  (recur (next segments) source line column (conj ranges {:line line
+                                                                          :column column})))
+          "<" (do (not-in-selection! ranges)
+                  (recur (next segments) source line column (conj ranges {:line line :column column :open? true})))
+          ">" (do (in-selection! ranges)
+                  (recur (next segments) source line column (update ranges (dec (count ranges)) assoc :end-line line :end-column column :open? false)))
+          "\n" (recur (next segments) (str source text) (inc line) 0 ranges)
+          (recur (next segments) (str source text) line (+ column (count text)) ranges))))))
 
 (defn write-ranges [s ranges]
   (->> (reverse (sort-by (juxt :line :column :end-line :end-column) ranges))
-       (reduce (fn [s {:keys [line
+       (reduce (fn [s {:as sel
+                       :keys [line
                               column
                               end-line
                               end-column]}]
-                 (if end-line
+                 (if (or (nil? end-line)
+                         (and (= line end-line)
+                              (= column end-column)))
+                   (string/replace-at-coords s {:from [line column]} "|")
                    (-> s
-                       (structure/insert-at-coords [end-line end-column] ">")
-                       (structure/insert-at-coords [line column] "<"))
-                   (structure/insert-at-coords s [line column] "|"))) s)))
-
+                       (string/replace-at-coords {:from [end-line end-column]} ">")
+                       (string/replace-at-coords {:from [line column]} "<")))) s)))
 

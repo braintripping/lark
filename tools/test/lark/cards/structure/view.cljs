@@ -9,7 +9,9 @@
             [lark.cards.structure.core :as structure]
             [lark.cards.structure.samples :as samples]
             [lark.tree.core :as tree]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [lark.tree.reader :as rd]
+            [lark.cards.structure.pointer :as pointer]))
 
 (jss/classes! {"@global"
                {".hidden" {:position "absolute"
@@ -89,9 +91,13 @@
 
 (defn show-editor-state [{:keys [ast
                                  selections]}]
+  (when ast
+    (when-not (instance? rd/Node ast)
+      (prn :WHAT 'IS 'THIS ast))
+    (assert (instance? rd/Node ast)))
   [cm/editor
    (merge {:value (emit/string ast)
-           :ranges (mapv (partial structure/selection->range (tree/ast-zip ast)) selections)})])
+           :ranges (mapv (partial pointer/range (tree/ast-zip ast)) selections)})])
 
 (def error-count (atom 0))
 
@@ -121,9 +127,9 @@
                        (js/console.error error))}
        (when count (str "#" count))
        (when (:expected error)
-         [:div.f7.ph2.no-wrap
-          [:div "E: " (prn-str (:expected error))]
-          [:div "A: " (prn-str (:actual error))]])])))
+         [:div.f7.pa2.no-wrap
+          [:div.mh1.mv2 "E: " (prn-str (:expected error))]
+          [:div.mh1.mv2 "A: " (prn-str (:actual error))]])])))
 
 (v/defn view-samples []
   (let [{:as state
@@ -140,15 +146,21 @@
                                                        (match-op? op-key op-args operation))]
                                          [op-args source expected])
                                        (reduce (fn [m [op-args sample expected]]
-                                                 (update m op-args (fnil conj []) [sample expected])) {}))]]
+                                                 (update m op-args (fnil conj []) [sample expected])) {}))
+                  op-samples (for [[op-args tests] samples-by-args
+                                   :let [sample-states (->> (for [[sample expected] tests
+                                                                  :when (or (nil? selected-sample)
+                                                                            (= sample selected-sample))]
+                                                              (samples/operate-on-sample op-key op-args sample expected)))]
+                                   :when (seq sample-states)]
+                               {:op-args op-args
+                                :sample-states sample-states})]
+            :when (seq op-samples)]
         [:<>
          [:.mh2 [op-header op-key nil]]
          [:.flex.flex-wrap
-          (for [[op-args tests] samples-by-args
-                :let [sample-states (->> (for [[sample expected] tests
-                                               :when (or (nil? selected-sample)
-                                                         (= sample selected-sample))]
-                                           (samples/operate-on-sample op-key op-args sample expected)))]]
+          (for [{:keys [op-args
+                        sample-states]} op-samples]
             [:div.mh2.mb3
              #_{:class (when-not op-visible? "hidden")}
              [op-header op-key op-args]

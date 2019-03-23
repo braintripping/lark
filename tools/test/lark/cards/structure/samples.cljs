@@ -1,9 +1,11 @@
 (ns lark.cards.structure.samples
   (:require [lark.cards.structure.serialize-selections :as ss]
-            [lark.cards.structure.core :as structure]
+            [lark.cards.structure.operation :as operation]
             [lark.tree.emit :as emit]
             [lark.tree.core :as tree]
-            [chia.util :as u]))
+            [chia.util :as u]
+            [lark.cards.structure.position :as pos]
+            [lark.cards.structure.pointer :as pointer]))
 
 (defn with-args [args & pairs]
   (for [[in out] (partition 2 pairs)]
@@ -21,34 +23,40 @@
                    "[ab<c d>ef]"
                    "[abc< d>ef]"]
                   (mapcat (fn [sample] [sample {[] sample}])))
-   :edit/insert-text ["a|" {["x"] "ax|"
-                            ["\na"] "a\na|"
-                            ["\n"] "a\n|"}
-                      "|a" {["x"] "x|a"
-                            ["\na"] "\na|a"}
+   :edit/replace ["a|" {["x"] "ax|"
+                        ["\na"] "a\na|"
+                        ["\n"] "a\n|"}
+                  "|a" {["x"] "x|a"
+                        ["\na"] "\na|a"}
 
-                      "|js x" {["^"] "^|js x"}
+                  "|js x" {["^"] "^|js x"}
+                  " \"a|bc\" " {[""] " \"a|bc\" "
+                                ["X"] " \"aX|bc\" "}
 
-                      (for [s ["(" ")" "[" "]" "#" "^" "@" "~"]]
-                        ["( | )" {[s] (str "( " s "| )")}])
+                  (for [s ["(" ")" "[" "]" "#" "^" "@" "~"]]
+                    ["( | )" {[s] (str "( " s "| )")}])
 
-                      (with-args ["x"]
-                        "|a|" "x|ax|"
-                        "[|]" "[x|]"
-                        "|[]" "x|[]"
-                        "[]|" "[]x|"
-                        "|@a" "x|@a"
-                        " \"| " " \"x| "
+                  (with-args ["x"]
+                    "|a|" "x|ax|"
+                    "[|]" "[x|]"
+                    "|[]" "x|[]"
+                    "[]|" "[]x|"
+                    "|@a" "x|@a"
+                    " \"| " " \"x| "
 
-                        "(()|)" "(()x|)"                    ;; offset from right
+                    "(()|)" "(()x|)"                        ;; offset from right
 
-                        "@|a" "@x|a"
-                        "^j|s[]" "^jx|s[]"
-                        "a<a>a" "ax|a"
-                        "<a>a<a>" "x|ax|"
-                        "<[]>" "x|")
+                    "@|a" "@x|a"
+                    "^j|s[]" "^jx|s[]"
+                    "a<a>a" "ax|a"
+                    "<a>a<a>" "x|ax|"
+                    "<[]>" "x|"
+                    "<   > " "x| ")
 
-                      ]
+                  (with-args ["Y"]
+                    "a<b c>d ef gh" "aY|d ef gh"
+                    "[a<b] [c>d] ef gh" "[aY|d] ef gh"
+                    "[[a<b]] [c>d] ef gh" "?")]
    :cursor/move ["a |\n| b" {[:x 1] "a \n| |b"
                              [:x -1] "a| |\n b"
                              [:y 1] "a \n b|"
@@ -107,7 +115,7 @@
                 ranges]} (ss/read-ranges sample-source)
         ast (tree/ast source)
         selections (->> ranges
-                        (mapv (partial structure/range->selection (tree/ast-zip ast))))]
+                        (mapv (partial pos/range->selection (tree/ast-zip ast))))]
     {:-source source
      :ast ast
      :selections selections}))
@@ -117,12 +125,15 @@
         {:as state-after
          :keys [error
                 ast
-                selections]} (try (structure/operate op-key state-before op-args)
+                selections]} (operation/operate op-key state-before op-args)
+        #_(try (operation/operate op-key state-before op-args)
                                   (catch js/Error e
+                                    (print e)
                                     (js/console.error sample-before e)
                                     {:error e}))
-        sample-after (-> (emit/string ast)
-                         (ss/write-ranges (mapv (partial structure/selection->range (tree/ast-zip ast)) selections)))
+        sample-after (some-> ast
+                             (emit/string)
+                             (ss/write-ranges (mapv (partial pointer/range (tree/ast-zip ast)) selections)))
         fail? (and (u/some-str expected)
                    (not= expected sample-after))]
     {:op-key op-key

@@ -14,7 +14,8 @@
             [clojure.string :as str]
             [lark.tree.format :as format]
             [lark.tree.emit :as emit]
-            [lark.tree.reader :as r])
+            [lark.tree.reader :as r]
+            [chia.util :as u])
   (:require-macros [lark.structure.edit :as edit :refer [operation]]))
 
 (defn format!
@@ -201,7 +202,7 @@
 
 (defn chars-around [the-pointer]
   (mapv (fn [i]
-          (util/some-str (get-range the-pointer i))) [-1 1]))
+          (u/some-str (get-range the-pointer i))) [-1 1]))
 
 (defn uneval! [{{:keys [loc]} :magic/cursor
                 :as cm}]
