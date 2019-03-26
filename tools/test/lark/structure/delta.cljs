@@ -108,13 +108,11 @@
 
 (defn move-path [from-path to-path after-child path]
   (if (path/starts-with? path from-path)
-    (let [moved (if (= (count path)
-                       (count from-path))
-                  to-path
-                  (-> (into to-path (subvec path (count from-path)))
-                      (path/update-last #(+ % after-child))))]
-      (prn :MOVED path moved)
-      moved)
+    (if (= (count path)
+           (count from-path))
+      to-path
+      (-> (into to-path (subvec path (count from-path)))
+          (path/update-last #(+ % after-child))))
     path))
 
 (defn move-coll-path! [from to after]

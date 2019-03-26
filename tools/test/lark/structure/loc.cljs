@@ -6,112 +6,9 @@
             [lark.structure.string :as string]
             [lark.structure.coords :as coords]
             [cljs.spec.alpha :as s]
-            [lark.structure.path :as path]))
-
-(s/def ::loc #(instance? z/ZipperLocation %))
-
-(defn get-loc
-  "Returns `loc` at `path`"
-  [loc path]
-  (loop [segments (seq path)
-         loc loc]
-    (if (or (not loc)
-            (not segments))
-      loc
-      (recur (next segments)
-             (->> (iterate z/right (z/down loc))
-                  (take-while identity)
-                  (drop (first segments))
-                  (first))))))
-
-(defn path
-  "Returns path to `loc` from root"
-  [loc]
-  (loop [loc loc
-         out ()]
-    (if-not loc
-      (vec (drop 1 out))
-      (recur (z/up loc)
-             (cons (->> (z/lefts loc)
-                        (count))
-                   out)))))
-
-(defn next-between
-  "Returns loc s between `from-path` and `to-path`, inclusive of from and to."
-  [loc to-path]
-  (let [from-path (path loc)]
-    (if (= from-path to-path)
-      loc
-      (if (path/ancestor? from-path to-path)
-        (z/down loc)
-        (or (z/right loc)
-            (z/up loc)
-            (throw (js/Error. "Could not find")))))))
-
-(defn locs-between
-  [loc to-path]
-  (lazy-seq
-   (when loc
-     (cons loc
-           (let [p (path loc)]
-             (when (not= p to-path)
-               (locs-between (next-between loc to-path) to-path)))))))
-
-(defn remove-loc! [loc]
-  (let [p (path loc)]
-    (print "  " :remove-loc! p (emit/string loc))
-    (delta/shift! p -1)
-    (z/remove loc)))
-
-(s/fdef remove-loc!
-        :args (s/cat :loc ::loc)
-        :ret ::loc)
-
-(defn replace-splice! [loc nodes]
-  (if (empty? nodes)
-    (remove-loc! loc)
-    (let [path (path loc)
-          parent (path/parent path)]
-      (loop [loc (z/replace loc (first nodes))
-             i 1
-             offset-so-far [0 0]
-             offsets [[path [0 0] (emit/string loc)]]
-             children (next nodes)
-             spliced []]
-        (if children
-          (let [c (first children)
-                text (emit/string c)
-                offset-so-far (coords/+ offset-so-far (string/end-coords text))]
-            (recur (-> (z/insert-right loc c)
-                       (z/right))
-                   (inc i)
-                   offset-so-far
-                   (conj offsets [(path/append parent i) offset-so-far])
-                   (next children)
-                   (conj spliced (first children))))
-          (do
-            (delta/update-pointers!
-             (fn [[ppath poffset :as pointer]]
-               (if (= ppath path)
-                 (let [new-pointer
-                       (reduce (fn [[path offset] [npath nstart]]
-                                 (if (coords/> nstart poffset)
-                                   (reduced [path (coords/+ offset)])
-                                   [npath (coords/- offset nstart)]))
-                               pointer
-                               offsets)]
-                   #_#_#_(prn :updated-pointer)
-                       (print "  " {ppath poffset})
-                       (print "  " (apply hash-map new-pointer))
-                   new-pointer)
-                 pointer)))
-            loc))))))
-
-(defn top [loc]
-  (loop [loc loc]
-    (if-let [up (z/up loc)]
-      (recur up)
-      loc)))
+            [lark.structure.path :as path]
+            [lark.tree.core :as tree]
+            [applied-science.js-interop :as j]))
 
 (defn- call-n
   "Calls `f` on `x` `n` times."
@@ -121,13 +18,26 @@
   (let [n (max n 0)]
     (loop [i 0
            x x]
-      (if (= n i)
+      (if (identical? n i)
         x
         (recur (inc i) (f x))))))
 
+(defn path
+  "Returns path to `loc` from root"
+  [loc]
+  (loop [^z/ZipperPath zpath (.-path loc)
+         path #js[]]
+    (if-let [ppath (and zpath ^z/ZipperPath (.-ppath zpath))]
+      (recur ppath (j/push! path (count (.-l zpath))))
+      (vec (.reverse (cond-> path
+                             zpath (j/push! (count (.-l zpath)))))))))
+
 (defn nav
+  "Moves `loc` to `to-path`"
   [loc to-path]
-  (let [[from to] (path/drop-common (path loc) to-path)
+  (let [to-path (cond-> to-path
+                        (keyword-identical? :end (path/get-last to-path)) (pop))
+        [from to] (path/drop-common (path loc) to-path)
         loc (call-n z/up (dec (count from)) loc)
         from (seq (take 1 from))]
     (loop [from from
@@ -155,36 +65,152 @@
                         (call-n z/right (first to))))
             :else loc))))
 
+(defn get-loc
+  "Returns `loc` nested in `path`"
+  [loc path]
+  (loop [segments (seq path)
+         loc loc]
+    (let [nsegment (first segments)]
+      (if (or (not loc)
+              (not segments)
+              (keyword-identical? :end nsegment))
+        loc
+        (recur (next segments)
+               (->> (iterate z/right (z/down loc))
+                    (take-while identity)
+                    (drop nsegment)
+                    (first)))))))
+
+(comment
+ (let [z (tree/string-zip "[a[ d [ a b [a b ] ]  e]]")
+       p [0 1 3 5 2]
+       loc (get-loc z p)
+       dc (fn [loc to-path]
+            (path/drop-common (path loc) to-path))
+       gp (fn [loc to-path]
+            (path loc))
+
+       _p1 (into [] p)
+       _p2 (into [] p)]
+
+   (simple-benchmark [g =] (g _p1 _p2) 100000)
+   (simple-benchmark [g path/equal] (g _p1 _p2) 100000)
+
+   (= (= _p1 _p2)
+      (path/equal _p1 _p2))))
+
+;; NOTE
+;; we will need to iterate across _locs and paths_, not only locs.
+(defn next-path-between
+  "Return next path between `from-path` and `to-path`, inclusive of from and to."
+  [loc from-path to-path]
+  (assert (not (path/before? to-path from-path)))
+  (if (path/equal from-path to-path)
+    to-path
+    (if (path/ancestor? from-path to-path)
+      (if (z/down loc) (conj from-path 0)
+                       (conj from-path :end))
+      (if (keyword-identical? :end (path/get-last from-path))
+        (pop from-path)
+        (if (z/right loc)
+          (path/update-last from-path inc)
+          (path/update-last from-path (constantly :end)))))))
+
+(defn next-between [[from-path from-loc] to-path]
+  (let [p (next-path-between from-loc from-path to-path)]
+    [p (nav from-loc p)]))
+
+(defn paths-between
+  [loc from-path to-path]
+  (lazy-seq
+   (when loc
+     (cons from-path
+           (when (not (path/equal from-path to-path))
+             (let [npath (next-path-between loc from-path to-path)]
+               (paths-between (nav loc npath) npath to-path)))))))
+
+(defn remove-loc [loc]
+  (let [p (path loc)]
+    ;(print "  " :remove-loc! p (emit/string loc))
+    (delta/shift! p -1)
+    (z/remove loc)))
+
+(s/def ::loc #(instance? z/ZipperLocation %))
+
+(defn replace-splice [loc nodes]
+  ;; MAYBE,
+  ;; refactor to receive the splice-path, to support :end.
+  (if (empty? nodes)
+    (remove-loc loc)
+    (let [path (path loc)
+          parent (path/parent path)]
+      (loop [loc (z/replace loc (first nodes))
+             i 1
+             offset-so-far [0 0]
+             offsets [[path [0 0] (emit/string loc)]]
+             children (next nodes)
+             spliced []]
+        (if children
+          (let [c (first children)
+                text (emit/string c)
+                offset-so-far (coords/+ offset-so-far (string/end-coords text))]
+            (recur (-> (z/insert-right loc c)
+                       (z/right))
+                   (inc i)
+                   offset-so-far
+                   (conj offsets [(path/append parent i) offset-so-far])
+                   (next children)
+                   (conj spliced (first children))))
+          (do
+            (delta/update-pointers!
+             (fn [[ppath poffset :as pointer]]
+               (if (path/equal ppath path)
+                 (reduce (fn [[path offset] [npath nstart]]
+                           (if (coords/> nstart poffset)
+                             (reduced [path (coords/+ offset)])
+                             [npath (coords/- offset nstart)]))
+                         pointer
+                         offsets)
+                 pointer)))
+            loc))))))
+
+(defn top [loc]
+  (loop [loc loc]
+    (if-let [up (z/up loc)]
+      (recur up)
+      loc)))
+
+
 (defn to-child [loc i]
   (call-n z/right i (z/down loc)))
 
-
 (defn joinable? [loc1 loc2]
-  (and (some-> (z/right loc1)
+  (and loc1 loc2
+       (some-> (z/right loc1)
                (z/node)
                (identical? (z/node loc2)))
        (let [t1 (.-tag (z/node loc1))
              t2 (.-tag (z/node loc2))]
-         (or (= t1 t2)
+         (or (keyword-identical? t1 t2)
              (every? #{:vector
                        :list} [t1 t2])))))
 
-(defn join-terminals [loc1 loc2 p1 p2]
+(defn append-terminal [loc1 loc2 p1 p2]
   (let [{v1 :value} (z/node loc1)
         {v2 :value} (z/node loc2)
-        loc (-> (remove-loc! loc2)
+        loc (-> (remove-loc loc2)
                 (nav p1)
                 (z/edit assoc :value (str v1 v2)))]
     (delta/move-offsets! p2 p1 (string/end-coords v1))
     #_(delta/add-offset! p1 (string/end-coords v1))
     loc))
 
-(defn join-colls! [loc1 loc2 p1 p2]
+(defn append-coll [loc1 loc2 p1 p2]
   (let [{c1 :children} (z/node loc1)
         {c2 :children} (z/node loc2)]
     (delta/move-coll-path! p2 p1 (count c1))
     (let [loc (-> loc2
-                  (remove-loc!)
+                  (remove-loc)
                   (nav p1)
                   (z/edit assoc :children (into (vec c1) c2)))
           outloc (cond-> loc
@@ -192,15 +218,22 @@
                          (to-child (count c1)))]
       outloc)))
 
-(defn join! [loc1 loc2]
+(defn into-loc
+  "Copies content of `loc2` into `loc1`, removes loc2, returns loc1"
+  [loc1 loc2]
   (let [p1 (path loc1)
         p2 (path loc2)
         colls? (n/may-contain-children? (z/node loc1))
         joined (if colls?
-                 (join-colls! loc1 loc2 p1 p2)
-                 (join-terminals loc1 loc2 p1 p2))]
-    joined))
+                 (append-coll loc1 loc2 p1 p2)
+                 (append-terminal loc1 loc2 p1 p2))]
+    (nav joined p1)))
 
+
+
+(s/fdef remove-loc
+        :args (s/cat :loc ::loc)
+        :ret ::loc)
 
 (comment
  (defn ops-between
@@ -268,3 +301,10 @@
        :when (not= expected ops)]
    [:from from :to to :expected expected :actual ops]))
 
+
+(comment
+ (let [loc (tree/string-zip "()")
+       from []
+       to [:end]
+       loc (get-loc loc from)]
+   (paths-between loc from to)))

@@ -8,8 +8,9 @@
             [fast-zip.core :as z]))
 
 (defn with-args [args & pairs]
-  (for [[in out] (partition 2 pairs)]
-    [in {args out}]))
+  (let [triples (partition 2 (interleave (partition 2 pairs) (if (vector? args) (repeat args) args)))]
+    (for [[[in out] args] triples]
+      [in {args out}])))
 
 (def samples
   {:identity (->> ["^|js x"
@@ -25,11 +26,20 @@
                    ]
                   (mapcat (fn [sample] [sample {[] sample}])))
    :edit/replace [(with-args ["Y"]
-                             "a<b [] c>d" "aY|d"
-                             "[a<b] [c>d]" "[aY|d]"
-                             "[[a<b]] [][] [c>d] ef gh" "?"
+                             "a<b>c" "aY|c"
                              "a<b c>d" "aY|d"
-                             ;"<a >" "Y|"
+                             "[a<b] [c>d]" "[aY|d]"
+                             "[[a<b]]x[c>d]" "[[a]Y|d]"
+                             "[[a<b]c]d>" "[[a]]Y|"
+                             "<   > " "Y| "
+
+                             "<a [b>c]" "[Y|c]"
+
+                             "(<x>)" "(Y|)"
+                             "[<()x>]" "[Y|]"
+                             "[<x()>]" "[Y|]"
+                             "<a []>" "Y|"
+                             "<[]>" "Y|"
                              )
 
                   "a|" {["x"] "ax|"
@@ -58,10 +68,16 @@
                              "@|a" "@x|a"
                              "^j|s[]" "^jx|s[]"
                              "a<a>a" "ax|a"
-                             "<a>a<a>" "x|ax|"
-                             "<[]>" "x|"
-                             "<   > " "x| ")]
-   #_#_:cursor/move ["a |\n| b" {[:x 1] "a \n| |b"
+                             "<a>a<a>" "x|ax|")]
+   :cursor/move [
+                 (with-args (for [i (range 6)]
+                              [:x i])
+                            "|([])" "|([])"
+                            "|([])" "(|[])"
+                            "|([])" "([|])"
+                            "|([])" "([]|)"
+                            "|([])" "([])|")
+                 "a |\n| b" {[:x 1] "a \n| |b"
                              [:x -1] "a| |\n b"
                              [:y 1] "a \n b|"
                              [:y -1] "|a \n b"}

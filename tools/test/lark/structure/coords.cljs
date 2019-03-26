@@ -51,8 +51,8 @@
            (core/<= c1 c2))))
 
 (defn = [[l1 c1] [l2 c2]]
-  (and (core/= l1 l2)
-       (core/= c1 c2)))
+  (and (identical? l1 l2)
+       (identical? c1 c2)))
 
 (defn point? [{:keys [from to]}]
   (or (nil? to)

@@ -262,11 +262,13 @@
   IPrintWithWriter
   (-pr-writer [o writer _]
     (let [options (dissoc options :string :invalid-nodes :cursor)]
-      (-write writer (str (cond-> [(str "🥚" (name tag))]
-                                  range (conj range)
-                                  (seq options) (conj options)
-                                  (not (seq children)) (conj (subs (str value) 0 10))
-                                  children (conj (str "…" (map :tag children) "…"))))))))
+      (-write writer
+              (str "🥚" (name tag))
+              #_(str (cond-> [(str "🥚" (name tag))]
+                           range (conj range)
+                           (seq options) (conj options)
+                           (not (seq children)) (conj (subs (str value) 0 10))
+                           children (conj (str "…" (map :tag children) "…"))))))))
 
 (defn delimiter-error [tag reader]
   (let [[line col] (position reader)]

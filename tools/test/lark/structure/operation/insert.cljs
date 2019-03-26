@@ -15,111 +15,93 @@
             [cljs.spec.alpha :as s]
             [lark.tree.node :as n]))
 
+(def debug? false)
 
-(defn replace-in-terminal! [loc from-coords to-coords text]
-  (if-not (n/terminal? (z/node loc))
-    (do
-      #_(prn :passing-not-terminal (emit/string loc))
-      loc)
-    (do
-      (delta/print-selections)
-      (let [text-before (emit/string (z/node loc))
-            from-coords (or from-coords [0 0])
-            to-coords (or to-coords (string/end-coords text-before))
-            path (loc/path loc)
-            insertion-point (delta/tracked {:from [path to-coords]})
-            text-after (string/replace-at-coords text-before
-                                                 {:from from-coords
-                                                  :to to-coords}
-                                                 text)
-            nodes-after (:children (parse/ast text-after))
-            loc (if (u/some-str text-after)
-                  (loc/replace-splice! loc nodes-after)
-                  (loc/remove-loc! loc))
-            offset (-> from-coords
-                       (coords/- to-coords)
-                       (coords/+ (string/end-coords text)))]
-        #_(prn :replace-in-terminal offset :from (:from @insertion-point))
+(defn print! [& args]
+  (when debug?
+    (apply print args)))
 
-        ;; no, we shouldn't add an offset to the _parent_ that we _inserted_ this into...
-        (delta/add-offset! (:from @insertion-point) offset)
-        (delta/print-selections)
-        loc))))
+(defn replace-in-terminal! [loc {from-coords :from
+                                 to-coords :to} text]
+  (assert (n/terminal? (z/node loc)))
+  (print! "\n\nReplace in Terminal " (pr-str (emit/string loc)) (pr-str text))
+  (delta/print-selections)
+  (let [text (or text "")
+        text-before (emit/string (z/node loc))
+        from-coords (or from-coords [0 0])
+        to-coords (or to-coords (string/end-coords text-before))
+        path (loc/path loc)
+        insertion-point (delta/tracked {:from [path to-coords]})
+        text-after (string/replace-at-coords text-before
+                                             {:from from-coords
+                                              :to to-coords}
+                                             text)
+        nodes-after (:children (parse/ast text-after))
+        loc (if (u/some-str text-after)
+              (loc/replace-splice loc nodes-after)
+              (loc/remove-loc loc))
+        offset (-> from-coords
+                   (coords/- to-coords)
+                   (coords/+ (string/end-coords text)))]
+    (delta/add-offset! (:from @insertion-point) offset)
+    (delta/print-selections)
+    loc))
 
-(defn merge-between! [loc span]
-  (print "\n\n\n\n" :merge-between (emit/string loc) @span)
-  (let [{[from _] :from
-         [to _] :to} @span]
-    (assert (path/before? from to)))
-  (loop [ploc nil
-         loc (loc/nav loc (first (:from @span)))
-         i 0]
-    (let [to (first (:to @span))]
-      (if (> i 20)
-        (throw (js/Error. "Looping"))
-        (let [node (z/node loc)
-              p (loc/path loc)]
+(defn merge-between [loc span]
+  (assert loc "merge-between requires loc")
+  (print! "\n\nMerge Between" (emit/string (loc/top loc)) ", " (first (:from @span)) ">" (first (:to @span)))
+  (let [[spath sloc :as start] (let [p (first (:from @span))]
+                                 [p (loc/nav loc p)])]
+    (if-not sloc
+      (do
+        (prn :merge-between-no-loc)
+        loc)
+      (loop [ploc nil
+             [p loc] start]
+        (let [to (first (:to @span))
+              action (cond (= p to) :return
+                           (loc/joinable? ploc loc) :join
+                           (path/after? p to) :too-far
+                           :else :continue)]
 
-          (print (:tag node) (emit/string node) :path p :$to to :join? (when (and ploc loc (loc/joinable? ploc loc)) (map emit/string [ploc loc])) "       " :to to)
+          (print! "  " action (some-> ploc (emit/string) (pr-str)) (some-> loc (emit/string) (pr-str)) p "TO: " to)
 
-          (cond (and (= p to)
-                     (nil? ploc)) loc
+          (case action
+            :return loc
+            :join (recur nil [(loc/path ploc) (loc/into-loc ploc loc)])
+            :continue (recur loc (loc/next-between [p loc] to))
+            :too-far (throw (js/Error. "Navigated too far"))))))))
 
-                (and ploc
-                     loc
-                     (loc/joinable? ploc loc))
-                (recur nil (loc/join! ploc loc) (inc i))
 
-                ;;; need to fix path/after?, likely is broken
-                (path/after? p to) (do
-                                     (prn :too-far p :> to)
-                                     (throw (js/Error. "Navigated too far")))
-
-                :else
-                (recur loc (loc/next-between loc to) (inc i))))))))
-(comment
- (-> (delta/track []
-                  (let [loc (tree/string-zip "[a][b]")
-                        joined (loc/join! (z/down loc)
-                                          (-> loc z/down z/right))]
-                    {:ast (z/root joined)}))
-     :ast
-     emit/string))
 
 (defn remove-between! [loc span]
-  (loop [loc (loc/nav loc (first (:from @span)))
-         i 0]
-    (assert loc "remove-between loc")
-    (let [p (loc/path loc)
-          {[from _] :from
-           [to _] :to} @span]
-      (when (> i 100) (throw (js/Error. "Looping")))
-
-      (cond (= p to) loc
-            (= p from) (recur (loc/next-between loc to) (inc i))
-            (or (path/ancestor? p from)
-                (path/ancestor? p to)) (if-let [nloc (loc/next-between loc to)]
-                                         (recur nloc (inc i))
-                                         (throw (js/Error. (str "not-found-next"
-                                                                )
-                                                           )))
-            :else
-            (recur (loc/remove-loc! loc) (inc i))))))
+  (let [start-p (first (:from @span))
+        start-loc (loc/nav loc start-p)]
+    (print! "\n\nRemove Between")
+    (loop [[path loc] [start-p start-loc]
+           i 0]
+      (let [{[from _] :from
+             [to _] :to} @span
+            action (cond (= path to) :return
+                         (= path from) :next
+                         (= :end (path/get-last path)) :next
+                         (or (path/ancestor? path from)
+                             (path/ancestor? path to)) :next
+                         :else :remove)
+            ]
+        (when (> i 100) (throw (js/Error. "Looping")))
+        (print! "  " action (pr-str (emit/string loc)))
+        (case action
+          :return loc
+          :next (recur (loc/next-between [path loc] to) (inc i))
+          :remove (let [loc (loc/remove-loc loc)]
+                    (recur [(loc/path loc) loc] (inc i))))))))
 
 (comment
  (let [loc (tree/string-zip "x")]
    (loc/nav loc [0])))
 
-(defn trim-edges [loc {[from-path from-coords] :from
-                       [to-path to-coords] :to} to-insert]
-  (-> loc
-      (loc/nav from-path)
-      (replace-in-terminal! from-coords nil "")
-      (loc/nav to-path)
-      (replace-in-terminal! nil to-coords to-insert)))
-
-(defn insert-from-text [loc kind s]
-  (prn :insert kind)
+(defn insert-by-text [loc kind s]
   (let [path (loc/path loc)
         {pchildren :children} (z/node loc)
         {:keys [children]} (tree/ast s)
@@ -131,18 +113,38 @@
     (delta/shift! insertion-path (count children))
     loc))
 
+(defn cut-edge [loc side span text-insert]
+  (let [[path coords] (get @span side)
+        loc (loc/nav loc path)]
+    (cond (= :end (path/get-last path))
+          (cond-> loc
+                  text-insert (insert-by-text :append-child text-insert))
+
+          (n/terminal? (z/node loc))
+          (replace-in-terminal! loc {side coords} text-insert)
+
+          :else
+          (if text-insert
+            (loc/replace-splice loc (:children (tree/ast text-insert)))
+            (loc/remove-loc loc)))))
+
 (defn inside-left [node inner-span offset]
   (and
    (coords/< offset (:from inner-span))
    (coords/> offset (:from node))))
 
-(defn replacement-kind [loc offset]
+(defn replace-span! [loc *span s]
+  (-> loc
+      (remove-between! *span)
+      (cut-edge :from *span nil)
+      (cut-edge :to *span s)
+      (merge-between *span)))
+
+(defn replacement-kind [loc [path offset]]
   (let [node (z/node loc)
         inner-span (coords/inner-span node)
-        end-pos (pointer/end-pos loc offset)
-        kind (cond end-pos (case end-pos
-                             :end-inner :append-child
-                             :end-outer :insert-after)
+        end-pos (pointer/end-pos? path)
+        kind (cond end-pos :append-child
                    (or (n/terminal? node)
                        (inside-left node inner-span offset)) :splice
                    (coords/= offset (:from node)) :insert-before
@@ -153,32 +155,16 @@
                                           "` " offset))))]
     kind))
 
-(defn replace-span! [loc *span s]
-  ;; TODO
-  ;;
-  ;; handle case where `to` is at the end of a coll.
-  ;;
-  (prn :REPLACE @*span s)
-  (let [_ (prn 11 (emit/string loc))
-        loc (trim-edges loc @*span s)
-        _ (prn 12 (emit/string loc))
-        ;_ (delta/cursor! [(first (:to span)) (string/end-coords s)])
-        loc (remove-between! loc *span)
-        _ (prn 13 (emit/string loc))
-        loc (merge-between! loc *span)
-        ]
-
-
-    loc))
-
-(defn replace-at-loc! [loc {:keys [from to]} s]
-  (let [to (or to from)
-        from-loc (loc/get-loc loc (first from))
-        kind (replacement-kind from-loc (second to))]
+(defn replace-at-path! [loc {:keys [from to]} s]
+  (let [path (first from)
+        loc (loc/nav loc path)
+        kind (replacement-kind loc from)]
     (case kind
-      :splice (replace-in-terminal! from-loc (second from)
-                                    (second to) s)
-      (insert-from-text from-loc kind s))))
+      :splice (let [from-offset (second from)
+                    to-offset (if to (second to) from-offset)]
+                (replace-in-terminal! loc {:from from-offset
+                                           :to to-offset} s))
+      (insert-by-text loc kind s))))
 
 (defmethod impl/-operate :edit/replace
   [_ state [s]]
@@ -186,8 +172,8 @@
        (reduce
         (fn replace-span* [state *span]
           (let [loc (tree/zip (:ast state))
-                loc (if (pointer/same-loc? @*span)
-                      (replace-at-loc! loc @*span s)
+                loc (if (pointer/same-paths? @*span)
+                      (replace-at-path! loc @*span s)
                       (replace-span! loc *span s))]
             (when-let [to (:to @*span)]
               (reset! *span {:from to}))
@@ -203,13 +189,26 @@
 
 (s/fdef replace-in-terminal!
         :args (s/cat :loc ::loc/loc
-                     :start (s/nilable ::coords/coord)
-                     :end (s/nilable ::coords/coord)
-                     :text string?)
+                     :span ::coords/span
+                     :text (s/nilable string?))
         :ret ::loc/loc)
 
-(s/fdef replace-at-loc!
+(s/fdef replace-at-path!
         :args (s/cat :loc ::loc/loc
                      :span ::pointer/span
                      :text string?)
         :ret ::loc/loc)
+
+(s/fdef replacement-kind
+        :args (s/cat :loc ::loc/loc
+                     :pointer ::pointer/pointer))
+
+
+(comment
+ (-> (delta/track []
+                  (let [loc (tree/string-zip "[a][b]")
+                        joined (loc/into-loc (z/down loc)
+                                             (-> loc z/down z/right))]
+                    {:ast (z/root joined)}))
+     :ast
+     emit/string))
