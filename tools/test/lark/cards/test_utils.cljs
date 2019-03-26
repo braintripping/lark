@@ -1,4 +1,4 @@
-(ns lark.structure.test-utils
+(ns lark.cards.test-utils
   (:require lark.editors.codemirror
             ["codemirror" :as CM]
             ["codemirror/addon/search/searchcursor" :as search-cursor]

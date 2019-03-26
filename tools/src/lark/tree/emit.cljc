@@ -94,7 +94,7 @@
              (some? tag)
              (perf/unchecked-keyword-identical? :list tag))
     (some-> (first children)
-            (u/guard #(perf/keyword-in? [:keyword :token] (.-tag %)))
+            (u/guard-> #(perf/keyword-in? [:keyword :token] (.-tag %)))
             .-value)))
 
 (defn- with-children [line column options node edges]

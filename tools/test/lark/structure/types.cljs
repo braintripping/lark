@@ -1,4 +1,4 @@
-(ns lark.cards.structure.types
+(ns lark.structure.types
   (:refer-clojure :exclude [Range]))
 
 (defrecord Range [^number line ^number column])

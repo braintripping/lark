@@ -11,11 +11,11 @@
   "Given ClojureScript source, returns AST"
   parse/ast)
 
-(def ast-zip n/ast-zip)
+(def zip n/ast-zip)
 
 (def string-zip
   "Given ClojureScript source, returns zipper"
-  (comp ast-zip parse/ast))
+  (comp zip parse/ast))
 
 (defn format-zip [loc]
   {:pre [(= (type loc) z/ZipperLocation)]}

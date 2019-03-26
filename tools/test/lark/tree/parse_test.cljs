@@ -116,7 +116,7 @@
     (testing "selections"
       (binding [emit/*print-selections* true]
         (let [ast (parse/ast "(+ 1 2 3)")
-              root (tree/ast-zip ast)
+              root (tree/zip ast)
               root-string (fn [loc]
                             (-> loc
                                 z/root

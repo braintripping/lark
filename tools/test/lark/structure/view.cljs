@@ -1,4 +1,4 @@
-(ns lark.cards.structure.view
+(ns lark.structure.view
   (:require [chia.view :as v]
             [lark.cards.cm :as cm]
             [lark.cards.utils :as cu]
@@ -6,12 +6,13 @@
             [chia.jss :as jss]
             [lark.tree.emit :as emit]
             [chia.reactive.atom :as ra]
-            [lark.cards.structure.core :as structure]
-            [lark.cards.structure.samples :as samples]
+            [lark.structure.core :as structure]
+            [lark.structure.samples :as samples]
             [lark.tree.core :as tree]
             [clojure.string :as str]
             [lark.tree.reader :as rd]
-            [lark.cards.structure.pointer :as pointer]))
+            [lark.structure.pointer :as pointer]
+            [lark.structure.coords :as coords]))
 
 (jss/classes! {"@global"
                {".hidden" {:position "absolute"
@@ -91,13 +92,11 @@
 
 (defn show-editor-state [{:keys [ast
                                  selections]}]
-  (when ast
-    (when-not (instance? rd/Node ast)
-      (prn :WHAT 'IS 'THIS ast))
-    (assert (instance? rd/Node ast)))
-  [cm/editor
-   (merge {:value (emit/string ast)
-           :ranges (mapv (partial pointer/range (tree/ast-zip ast)) selections)})])
+  (let [spans (mapv (partial pointer/resolve-span (tree/zip ast)) selections)]
+    [cm/editor
+     (merge {:value (emit/string ast)
+             :spans  spans})]))
+
 
 (def error-count (atom 0))
 

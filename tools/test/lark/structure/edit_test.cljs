@@ -1,6 +1,6 @@
 (ns lark.structure.edit-test
   (:require [lark.editors.codemirror]
-            [lark.structure.test-utils :as utils :refer [test-exec]]
+            [lark.cards.test-utils :as utils :refer [test-exec]]
             [cljs.test :refer-macros [deftest is are testing]]))
 
 (defn prn-ret-cm [cm]

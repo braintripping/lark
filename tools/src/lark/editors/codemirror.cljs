@@ -313,7 +313,7 @@
                                                         {:errors []}))]
         (highlight-parse-errors! editor invalid-nodes)
         (when (not= next-ast ast)
-          (set-zipper! editor (tree/ast-zip next-ast) {:decorate? false}))))))
+          (set-zipper! editor (tree/zip next-ast) {:decorate? false}))))))
 
 (defn update-cursor!
   [{:keys [zipper magic/brackets?]

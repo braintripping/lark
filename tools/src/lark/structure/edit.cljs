@@ -46,7 +46,7 @@
   (let [{:as new-ast
          :keys [string
                 ast/cursor-pos]} (tree/format-ast ast)
-        new-zipper (tree/ast-zip new-ast)]
+        new-zipper (tree/zip new-ast)]
 
     (when (not= string (.getValue editor))                  ;; only mutate editor if value has changed
       (.setValue editor string))

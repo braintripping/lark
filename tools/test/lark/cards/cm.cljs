@@ -18,7 +18,7 @@
                         options
 
                         mode
-                        ranges]
+                        spans]
                  :or {mode "clojure"}}]
   (let [cm-ref (hooks/use-ref)
         {:keys [sel
@@ -51,8 +51,8 @@
          (doseq [mark (j/call cm :getAllMarks)]
            (j/call mark :clear))
 
-         (doseq [{:as range
-                  :keys [line column end-line end-column]} ranges]
+         (doseq [{[line column] :from
+                  [end-line end-column] :to} spans]
            (if end-line
              (j/call cm :markText
                         #js {:line line :ch column}

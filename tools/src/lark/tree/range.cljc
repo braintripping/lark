@@ -91,7 +91,7 @@
                            :end-column (:end-column node)})))))
 
 (defn inner-left [node]
-  (let [left-edge (rd/edges (.-tag node))]
+  (let [left-edge (first (rd/edges (.-tag node)))]
     (cond-> (bounds node :left)
             left-edge (update :column + (count left-edge)))))
 

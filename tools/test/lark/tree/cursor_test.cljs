@@ -1,5 +1,5 @@
 (ns lark.tree.cursor-test
-  (:require [lark.structure.test-utils :as utils]
+  (:require [lark.cards.test-utils :as utils]
             [lark.editors.codemirror :as cm]
             [lark.tree.core :as tree]
             [fast-zip.core :as z]
@@ -111,7 +111,7 @@
 
                      ;; format the code and put in a new editor
                      formatted-zipper (-> (tree/formatted-ast (.getValue editor))
-                                          (tree/ast-zip))
+                                          (tree/zip))
                      formatted-str (-> formatted-zipper
                                        z/node
                                        :string)

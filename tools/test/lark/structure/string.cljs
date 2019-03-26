@@ -1,7 +1,7 @@
-(ns lark.cards.structure.string
+(ns lark.structure.string
   "String operations"
   (:require [chia.util :as u]
-            [lark.cards.structure.coords :as coords]
+            [lark.structure.coords :as coords]
             [cljs.spec.alpha :as s]))
 
 (defn line-count [s]

@@ -1,8 +1,8 @@
 (ns lark.cards.core
   (:require [chia.view :as v]
             [lark.cards.parse :as parse]
-            [lark.cards.structure.operation]
-            [lark.cards.structure.view :as structure-view]
+            [lark.structure.operation]
+            [lark.structure.view :as structure-view]
             [chia.view.hooks :as hooks]))
 
 (def pages {:structure [structure-view/view-samples]

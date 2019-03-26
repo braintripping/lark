@@ -239,8 +239,8 @@
               :range range
               :string string
 
-              :coords/from (subvec range 0 2)
-              :coords/to (subvec range 2 4)
+              :from (subvec range 0 2)
+              :to (subvec range 2 4)
 
               :line (nth range 0)
               :column (nth range 1)
