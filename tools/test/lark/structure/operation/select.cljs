@@ -1,4 +1,4 @@
-(ns lark.structure.operation.selections
+(ns lark.structure.operation.select
   (:require [lark.structure.pointer :as pointer]
             [lark.structure.delta :as delta]
             [lark.tree.core :as tree]

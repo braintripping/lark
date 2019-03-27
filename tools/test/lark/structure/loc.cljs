@@ -94,18 +94,18 @@
        _p2 (into [] p)]
 
    (simple-benchmark [g =] (g _p1 _p2) 100000)
-   (simple-benchmark [g path/equal] (g _p1 _p2) 100000)
+   (simple-benchmark [g path/=] (g _p1 _p2) 100000)
 
    (= (= _p1 _p2)
-      (path/equal _p1 _p2))))
+      (path/= _p1 _p2))))
 
 ;; NOTE
 ;; we will need to iterate across _locs and paths_, not only locs.
 (defn next-path-between
   "Return next path between `from-path` and `to-path`, inclusive of from and to."
   [loc from-path to-path]
-  (assert (not (path/before? to-path from-path)))
-  (if (path/equal from-path to-path)
+  (assert (not (path/< to-path from-path)))
+  (if (path/= from-path to-path)
     to-path
     (if (path/ancestor? from-path to-path)
       (if (z/down loc) (conj from-path 0)
@@ -125,7 +125,7 @@
   (lazy-seq
    (when loc
      (cons from-path
-           (when (not (path/equal from-path to-path))
+           (when (not (path/= from-path to-path))
              (let [npath (next-path-between loc from-path to-path)]
                (paths-between (nav loc npath) npath to-path)))))))
 
@@ -164,7 +164,7 @@
           (do
             (delta/update-pointers!
              (fn [[ppath poffset :as pointer]]
-               (if (path/equal ppath path)
+               (if (path/= ppath path)
                  (reduce (fn [[path offset] [npath nstart]]
                            (if (coords/> nstart poffset)
                              (reduced [path (coords/+ offset)])

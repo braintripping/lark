@@ -5,8 +5,8 @@
             [cljs.spec.alpha :as s]
 
    ;; for side effects (defmethods)
-            lark.structure.operation.insert
-            lark.structure.operation.selections))
+            lark.structure.operation.edit
+            lark.structure.operation.select))
 
 (defn operate [op state & args]
   (let [state (-> (delta/track (:selections state)

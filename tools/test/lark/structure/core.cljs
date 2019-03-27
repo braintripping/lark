@@ -3,7 +3,6 @@
             lark.structure.loc
             lark.structure.operation
             lark.structure.pointer
-            lark.structure.serialize-selections
             lark.structure.string
 
             [cljs.spec.alpha :as s]
@@ -17,15 +16,14 @@
 
 (defn ^:dev/after-load instrument []
   (st/instrument '[lark.structure.operation
-                   lark.structure.operation.insert
-                   lark.structure.operation.selections
-
+                   lark.structure.operation.edit
+                   lark.structure.operation.select
+                   lark.structure.operation.impl.replace
                    lark.structure.coords
                    lark.structure.delta
                    lark.structure.loc
                    lark.structure.path
                    lark.structure.pointer
-                   lark.structure.serialize-selections
                    lark.structure.string]))
 
 (defonce _

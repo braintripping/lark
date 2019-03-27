@@ -2,7 +2,7 @@
   (:require [chia.view :as v]
             [lark.cards.parse :as parse]
             [lark.structure.operation]
-            [lark.structure.view :as structure-view]
+            [lark.cards.structure.view :as structure-view]
             [chia.view.hooks :as hooks]))
 
 (def pages {:structure [structure-view/view-samples]

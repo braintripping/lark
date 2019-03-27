@@ -1,4 +1,4 @@
-(ns lark.structure.view
+(ns lark.cards.structure.view
   (:require [chia.view :as v]
             [lark.cards.cm :as cm]
             [lark.cards.utils :as cu]
@@ -6,13 +6,10 @@
             [chia.jss :as jss]
             [lark.tree.emit :as emit]
             [chia.reactive.atom :as ra]
-            [lark.structure.core :as structure]
-            [lark.structure.samples :as samples]
+            [lark.cards.structure.samples :as samples]
             [lark.tree.core :as tree]
             [clojure.string :as str]
-            [lark.tree.reader :as rd]
-            [lark.structure.pointer :as pointer]
-            [lark.structure.coords :as coords]))
+            [lark.structure.pointer :as pointer]))
 
 (jss/classes! {"@global"
                {".hidden" {:position "absolute"

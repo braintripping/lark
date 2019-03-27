@@ -1,23 +1,75 @@
 (ns lark.structure.path
-  (:refer-clojure :exclude [contains? resolve compare])
-  (:require [clojure.spec.alpha :as s]
+  (:refer-clojure :exclude [contains? resolve compare = < > >= <=])
+  (:require [clojure.core :as core]
+            [clojure.spec.alpha :as s]
             [goog.array :as garray]))
 
-(defn equal [p1 p2]
+(defn- ^number compare-segment
+  "Comparator, handles :end values."
+  [x y]
+  (cond
+    (identical? x y) 0
+
+    (nil? x) -1
+
+    (nil? y) 1
+
+    (number? x) (if (number? y)
+                  (garray/defaultCompare x y)
+                  (if (keyword-identical? y :end)
+                    -1
+                    (throw (js/Error. (str "Cannot compare " x " to " y)))))
+
+    (keyword-identical? x :end) (if (keyword-identical? y :end) 0 1)
+    :else
+    (throw (js/Error. (str "Cannot compare " x " to " y)))))
+
+(defn drop-common [p1 p2]
+  (let [c1 (count p1)
+        c2 (count p2)]
+    (loop [i 0]
+      (if (and (core/> c1 i)
+               (core/> c2 i)
+               (identical? (nth p1 i)
+                           (nth p2 i)))
+        (recur (inc i))
+        [(subvec p1 i)
+         (subvec p2 i)]))))
+
+(defn- compare [p1 p2]
+  (if (identical? p1 p2)
+    0
+    (let [iter1 (-iterator p1)
+          iter2 (-iterator p2)]
+      (loop []
+        (let [has-x ^boolean (.hasNext iter1)
+              has-y ^boolean (.hasNext iter2)]
+          (if
+           (and (false? has-x)
+                (false? has-y))
+            0
+            (let [cmp (compare-segment (when has-x (.next iter1))
+                                       (when has-y (.next iter2)))]
+              (if (zero? cmp)
+                (recur)
+                cmp))))))))
+
+(defn < [p1 p2]
+  (neg? (compare p1 p2)))
+
+(defn <= [p1 p2]
+  (not (pos? (compare p1 p2))))
+
+(defn > [p1 p2]
+  (pos? (compare p1 p2)))
+
+(defn >= [p1 p2]
+  (not (neg? (compare p1 p2))))
+
+(defn = [p1 p2]
   (cond (identical? p1 p2) true
-        (not (== (count p1) (count p2))) false
-        :else
-        (let [me-iter (-iterator p1)
-              you-iter (-iterator p2)]
-          (loop []
-            (if ^boolean (.hasNext me-iter)
-              (let [x (.next me-iter)
-                    y (.next you-iter)]
-                (if (or (identical? x y)
-                        (and (keyword? x) (keyword? y) (keyword-identical? x y)))
-                  (recur)
-                  false))
-              true)))))
+        (not (identical? (count p1) (count p2))) false
+        :else (zero? (compare p1 p2))))
 
 (defn get-last [path]
   (let [pcount (count path)]
@@ -41,80 +93,17 @@
           "Cannot append to an :end path")
   (conj path x))
 
-(defn drop-common [p1 p2]
-  (let [c1 (count p1)
-        c2 (count p2)]
-    (loop [i 0]
-      (if (and (> c1 i)
-               (> c2 i)
-               (identical? (nth p1 i)
-                           (nth p2 i)))
-        (recur (inc i))
-        [(subvec p1 i)
-         (subvec p2 i)]))))
-
-(defn ^number compare-segment
-  "Comparator, handles :end values."
-  [x y]
-  (cond
-    (identical? x y) 0
-
-    (nil? x) -1
-
-    (nil? y) 1
-
-
-    (number? x) (if (number? y)
-                  (garray/defaultCompare x y)
-                  (if (keyword-identical? y :end)
-                    -1
-                    (throw (js/Error. (str "Cannot compare " x " to " y)))))
-
-    (keyword-identical? x :end) (if (keyword-identical? y :end)
-                                  0
-                                  1)
-    :else
-    (throw (js/Error. (str "Cannot compare " x " to " y)))))
-
-(defn compare
-  [x y]
-  (or (first (drop-while zero? (mapv compare-segment x y)))
-      (- (count x)
-         (count y))))
-
-(comment
- (let [paths [[0]
-              [0 0]
-              [0 1]
-              [0 :end]
-              [1]
-              [1 0]
-              [1 1]
-              [1 1 1]
-              [1 :end]
-              [:end]]]
-
-   (assert
-    (= paths
-       (sort-by identity compare (shuffle paths))))))
-
-(defn before? [p1 p2]
-  (neg? (compare p1 p2)))
-
-(defn after? [p1 p2]
-  (pos? (compare p1 p2)))
-
 (defn ancestor? [parent child]
   (let [pcount (count parent)]
-    (and (< pcount (count child))
-         (equal parent
-                (subvec child 0 pcount)))))
+    (and (core/< pcount (count child))
+         (= parent
+            (subvec child 0 pcount)))))
 
 (defn within? [child parent]
   (let [pcount (count parent)]
-    (and (<= pcount (count child))
-         (equal parent
-                (subvec child 0 pcount)))))
+    (and (core/<= pcount (count child))
+         (= parent
+            (subvec child 0 pcount)))))
 
 (defn move-path [from-p to-p child-offset path]
   (if (within? path from-p)
@@ -126,8 +115,8 @@
 
 (defn starts-with? [path prefix]
   (let [pc (count prefix)]
-    (and (>= (count path) pc)
-         (equal prefix (subvec path 0 pc)))))
+    (and (core/>= (count path) pc)
+         (= prefix (subvec path 0 pc)))))
 
 (defn parent [path]
   (let [pc (count path)]
@@ -136,10 +125,10 @@
       (subvec path 0 (dec pc)))))
 
 (defn sibling? [p1 p2]
-  (and (= (count p1)
-          (count p2))
-       (equal (parent p1)
-              (parent p2))))
+  (and (core/= (count p1)
+               (count p2))
+       (= (parent p1)
+          (parent p2))))
 
 
 (defn depths [path]
@@ -153,7 +142,7 @@
                      (s/coll-of ::segment)))
 
 
-(s/fdef before?
+(s/fdef <
         :args (s/coll-of ::path)
         :ret boolean?)
 
@@ -178,3 +167,27 @@
 (s/fdef depths
         :args (s/cat :path ::path)
         :ret (s/coll-of ::path))
+
+
+(comment
+
+  (let [paths1 [[0 1 0 3]
+                [0 0 1 4]
+                [0 0 4]
+                [0 1 0 :end]
+                [1]
+                [1 0 10 3]
+                [1 1]
+                [1 1 1]
+                [1 :end]
+                [:end]
+                []
+                []
+                []]
+        paths2 (shuffle paths1)]
+
+    (simple-benchmark [f compare]
+                      (doseq [p1 paths1
+                              p2 (shuffle paths1)]
+                        (f p1 p2))
+                      10000)))

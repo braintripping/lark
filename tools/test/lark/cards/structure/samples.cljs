@@ -1,5 +1,5 @@
-(ns lark.structure.samples
-  (:require [lark.structure.serialize-selections :as ss]
+(ns lark.cards.structure.samples
+  (:require [lark.cards.structure.serialize-selections :as ss]
             [lark.structure.operation :as operation]
             [lark.tree.emit :as emit]
             [lark.tree.core :as tree]

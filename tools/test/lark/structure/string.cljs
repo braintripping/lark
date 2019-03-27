@@ -5,16 +5,14 @@
             [cljs.spec.alpha :as s]))
 
 (defn line-count [s]
+  ;; https://jsperf.com/counting-newlines/11
   (loop [lines 0
          index 0]
     (let [next-i (.indexOf s \newline index)]
-      (if (= -1 next-i)
+      (if (identical? -1 next-i)
         lines
         (recur (inc lines)
                (inc next-i))))))
-
-(s/fdef line-count
-        :args (s/cat :s string?))
 
 (defn- replace-at-index [s {:keys [from to]} to-insert]
   (let [to (or to from)]
@@ -57,11 +55,6 @@
   (let [indexes (u/update-vals selection #(some->> % (pos-index s)))]
     (replace-at-index s indexes to-insert)))
 
-(s/fdef replace-at-coords
-        :args (s/cat :s string?
-                     :sel ::coords/span
-                     :insert string?))
-
 (defn end-coords [s]
   (let [last-i (.lastIndexOf s \newline)]
     (if (= -1 last-i)
@@ -69,8 +62,29 @@
       [(line-count s)
        (- (.-length s) (inc last-i))])))
 
+
+(s/fdef line-count
+        :args (s/cat :s string?))
+
+(s/fdef replace-at-coords
+        :args (s/cat :s string?
+                     :sel ::coords/span
+                     :insert string?))
 (s/fdef end-coords
         :args (s/cat :s string?))
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 (comment
 

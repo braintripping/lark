@@ -1,4 +1,4 @@
-(ns lark.structure.serialize-selections
+(ns lark.cards.structure.serialize-selections
   "For representing cursors, |, and selections, <>."
   (:require [lark.structure.string :as string]
             [lark.structure.coords :as coords]))

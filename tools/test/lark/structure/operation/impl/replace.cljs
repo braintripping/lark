@@ -1,12 +1,10 @@
-(ns lark.structure.operation.insert
+(ns lark.structure.operation.impl.replace
   (:require [lark.structure.path :as path]
             [fast-zip.core :as z]
             [lark.structure.loc :as loc]
             [lark.tree.core :as tree]
             [lark.structure.delta :as delta]
-            [lark.structure.operation.impl :as impl]
             [lark.tree.emit :as emit]
-            [cljs.pprint :as pp]
             [lark.structure.string :as string]
             [lark.tree.parse :as parse]
             [chia.util :as u]
@@ -61,7 +59,7 @@
         (let [to (first (:to @span))
               action (cond (= p to) :return
                            (loc/joinable? ploc loc) :join
-                           (path/after? p to) :too-far
+                           (path/> p to) :too-far
                            :else :continue)]
 
           (print! "  " action (some-> ploc (emit/string) (pr-str)) (some-> loc (emit/string) (pr-str)) p "TO: " to)
@@ -165,21 +163,6 @@
                 (replace-in-terminal! loc {:from from-offset
                                            :to to-offset} s))
       (insert-by-text loc kind s))))
-
-(defmethod impl/-operate :edit/replace
-  [_ state [s]]
-  (->> (delta/selections)
-       (reduce
-        (fn replace-span* [state *span]
-          (let [loc (tree/zip (:ast state))
-                loc (if (pointer/same-paths? @*span)
-                      (replace-at-path! loc @*span s)
-                      (replace-span! loc *span s))]
-            (when-let [to (:to @*span)]
-              (reset! *span {:from to}))
-            (assert loc (str "loc not returned"))
-            (assoc state :ast (z/root loc))))
-        state)))
 
 (s/fdef replace-span!
         :args (s/cat :loc ::loc/loc
