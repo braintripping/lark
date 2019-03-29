@@ -82,7 +82,7 @@
              [to _] :to} @span
             action (cond (= path to) :return
                          (= path from) :next
-                         (= :end (path/get-last path)) :next
+                         (= :end (path/last path)) :next
                          (or (path/ancestor? path from)
                              (path/ancestor? path to)) :next
                          :else :remove)
@@ -114,7 +114,7 @@
 (defn cut-edge [loc side span text-insert]
   (let [[path coords] (get @span side)
         loc (loc/nav loc path)]
-    (cond (= :end (path/get-last path))
+    (cond (= :end (path/last path))
           (cond-> loc
                   text-insert (insert-by-text :append-child text-insert))
 

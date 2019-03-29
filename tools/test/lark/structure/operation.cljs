@@ -1,24 +1,25 @@
 (ns lark.structure.operation
-  (:require [lark.structure.operation.impl :as impl]
-            [lark.structure.delta :as delta]
+  (:require [lark.structure.delta :as delta]
             [lark.tree.reader :as rd]
             [cljs.spec.alpha :as s]
 
-   ;; for side effects (defmethods)
-            lark.structure.operation.edit
-            lark.structure.operation.select))
+            [lark.structure.operation.edit :as edit]
+            [lark.structure.operation.select :as select])
+  (:require-macros [lark.structure.operation :as o]))
+
+(defonce registry (atom {}))
 
 (defn operate [op state & args]
-  (let [state (-> (delta/track (:selections state)
-                               (apply impl/-operate op state args))
-                  (update :selections distinct))]
+  (let [operation (@registry op)
+        state (apply operation state args)]
     (assert (instance? rd/Node (:ast state))
             (str "did not return an AST: " op args (:ast state)))
     state))
 
-(defmethod impl/-operate :identity
-  [_ state]
-  state)
+(o/defop :identity identity)
+(o/defop :edit/replace edit/replace)
+(o/defop :selection/set-by-coords select/set-by-coords)
+(o/defop :selection/move select/move)
 
 #_(defmethod impl/operate :cursor/hop
     [_ {:as state
@@ -43,4 +44,5 @@
 (s/def ::ast #(instance? rd/Node %))
 (s/def ::state (s/keys :req-un [::ast]))
 (s/fdef operate
+        :args (s/cat :state ::state)
         :ret ::state)

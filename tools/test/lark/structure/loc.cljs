@@ -36,7 +36,7 @@
   "Moves `loc` to `to-path`"
   [loc to-path]
   (let [to-path (cond-> to-path
-                        (keyword-identical? :end (path/get-last to-path)) (pop))
+                        (keyword-identical? :end (path/last to-path)) (pop))
         [from to] (path/drop-common (path loc) to-path)
         loc (call-n z/up (dec (count from)) loc)
         from (seq (take 1 from))]
@@ -110,7 +110,7 @@
     (if (path/ancestor? from-path to-path)
       (if (z/down loc) (conj from-path 0)
                        (conj from-path :end))
-      (if (keyword-identical? :end (path/get-last from-path))
+      (if (keyword-identical? :end (path/last from-path))
         (pop from-path)
         (if (z/right loc)
           (path/update-last from-path inc)

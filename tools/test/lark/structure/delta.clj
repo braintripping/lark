@@ -8,13 +8,15 @@
    Operations must be performed in order (left to right).
 
    Use with delta/add! & delta/select!."
-  [selections & body]
-  `(binding [~deltas (volatile! {:selections (mapv ~'lark.structure.delta/tracked* ~selections)
-                                 :tracked []})]
-
-     (let [state# (do ~@body)
-           {selections# :selections} @~deltas]
-       (-> state#
-           (assoc :selections (mapv deref selections#))
-           (update :ast ~'lark.tree.emit/materialize)))))
+  [opts & body]
+  (let [[{:keys [selections]} body] (if (map? opts) [opts body] [nil (cons opts body)])]
+    `(binding [~deltas (volatile! {:selections (mapv ~'lark.structure.delta/tracked* ~selections)
+                                   :tracked []})]
+       (let [state# (do ~@body)
+             {selections# :selections} @~deltas]
+         (-> state#
+             (cond-> ~selections
+                     (assoc :selections (-> (mapv deref selections#)
+                                            (distinct))))
+             (update :ast ~'lark.tree.emit/materialize))))))
 

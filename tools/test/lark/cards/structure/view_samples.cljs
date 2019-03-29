@@ -1,4 +1,4 @@
-(ns lark.cards.structure.view
+(ns lark.cards.structure.view-samples
   (:require [chia.view :as v]
             [lark.cards.cm :as cm]
             [lark.cards.utils :as cu]
@@ -71,7 +71,7 @@
         {:on-click #(reset! ui-state nil)} "clear"]])))
 
 (def notes
-  {:cursor/move
+  {:selection/move
    "Need to handle beginning and end of lines."
    :+ch
    "
@@ -90,7 +90,7 @@
 (defn show-editor-state [{:keys [ast
                                  selections]}]
   (let [spans (mapv (partial pointer/resolve-span (tree/zip ast)) selections)]
-    [cm/editor
+    [cm/controlled
      (merge {:value (emit/string ast)
              :spans  spans})]))
 
@@ -127,7 +127,7 @@
           [:div.mh1.mv2 "E: " (prn-str (:expected error))]
           [:div.mh1.mv2 "A: " (prn-str (:actual error))]])])))
 
-(v/defn view-samples []
+(v/defn view []
   (let [{:as state
          :keys [operation]
          inspect :inspect
@@ -146,8 +146,11 @@
                   op-samples (for [[op-args tests] samples-by-args
                                    :let [sample-states (->> (for [[sample expected] tests
                                                                   :when (or (nil? selected-sample)
-                                                                            (= sample selected-sample))]
-                                                              (samples/operate-on-sample op-key op-args sample expected)))]
+                                                                            (= sample selected-sample))
+                                                                  :let [{:as operated
+                                                                         :keys [state-after]} (samples/operate-on-sample op-key op-args sample expected)]
+                                                                  :when (:error state-after)]
+                                                              operated))]
                                    :when (seq sample-states)]
                                {:op-args op-args
                                 :sample-states sample-states})]

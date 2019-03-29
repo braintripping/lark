@@ -1,6 +1,11 @@
 (ns lark.structure.core
   (:require lark.structure.coords
             lark.structure.loc
+
+            lark.structure.operation.edit
+            lark.structure.operation.select
+
+
             lark.structure.operation
             lark.structure.pointer
             lark.structure.string

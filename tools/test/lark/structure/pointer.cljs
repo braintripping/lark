@@ -17,36 +17,7 @@
 (defn print! [& args]
   (when debug? (apply print args)))
 
-;;;;;;;;;;;;;;;;;;;;;
-;;
-;; Resolve
-;;
-;; - for resolving pointers into absolute coordinates
 
-(defn end-pos? [path]
-  (when (= :end (path/get-last path))
-    :end-inner))
-
-(defn- resolve-node-offset [node [path [line+ col+]]]
-  (if (= :end (path/get-last path))
-    (:to (coords/inner-span node))
-    (let [[line col] (:range node)]
-      (coords/clamp [(+ line+ line)
-                     (cond-> col+
-                             (zero? line+) (+ col))] node))))
-
-(defn resolve
-  "Returns absolute coordinates for pointer."
-  [root-loc [path offset :as pointer]]
-  (let [loc (loc/get-loc root-loc path)
-        node (some-> loc z/node)]
-    (resolve-node-offset node pointer)))
-
-(defn resolve-span
-  "Returns absolute coordinates for span of pointers."
-  [loc {:keys [from to]}]
-  {:from (some->> from (resolve loc))
-   :to (some->> to (resolve loc))})
 
 ;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -144,41 +115,72 @@
           p (pointer z coords)]
       p)
   #_(let [s "[()]"]
-    [s
-     (u/for-map [coords [[0 0]
-                         [0 1]
-                         [0 2]
-                         [0 3]
-                         [0 4]
-                         [0 5]]]                            ;; should still be the space?
-       (let [z (tree/string-zip s)
-             pt (pointer z coords)
-             node (some->> (first pt)
-                           (loc/get-loc z)
-                           z/node)]
-         (assert (= (resolve-node-offset node pt)
-                    (coords/clamp coords (z/node z))))
-         ;; ISSUE...
-         ;; ok, so we represent the position in an empty list, or at the end of a non-terminal in last position of a collection,
-         ;; as the "index beyond the last child." Well, how do we _work_ with that?
-         ;; we have all these functions that expect to get a `loc`. do we _invent_ one?
-         ;; (|)  (()|)
-         ;; how do we _insert_ there? a non-printable marker loc? :marker, sexp nil, print nil, join-always. it has a position, but no value.
-         ;;
+      [s
+       (u/for-map [coords [[0 0]
+                           [0 1]
+                           [0 2]
+                           [0 3]
+                           [0 4]
+                           [0 5]]]                          ;; should still be the space?
+         (let [z (tree/string-zip s)
+               pt (pointer z coords)
+               node (some->> (first pt)
+                             (loc/get-loc z)
+                             z/node)]
+           (assert (= (resolve-node-offset node pt)
+                      (coords/clamp coords (z/node z))))
+           ;; ISSUE...
+           ;; ok, so we represent the position in an empty list, or at the end of a non-terminal in last position of a collection,
+           ;; as the "index beyond the last child." Well, how do we _work_ with that?
+           ;; we have all these functions that expect to get a `loc`. do we _invent_ one?
+           ;; (|)  (()|)
+           ;; how do we _insert_ there? a non-printable marker loc? :marker, sexp nil, print nil, join-always. it has a position, but no value.
+           ;;
 
-         {`(~(serialize/write-pointer-spans s [{:from coords}])
-            ~@coords)
-          `(~@pt ~(emit/string node))
-          }))]))
+           {`(~(serialize/write-pointer-spans s [{:from coords}])
+              ~@coords)
+            `(~@pt ~(emit/string node))
+            }))]))
+
+(defn pointer-span [loc coord-span]
+  (u/update-some-keys coord-span [:from :to] #(pointer loc %)))
 
 (defn same-paths? [span]
   (coords/point?
    (u/update-some-keys span [:from :to] first)))
 
-(defn resolve-coord-span [loc span]
-  (u/update-some-keys span [:from :to] #(pointer loc %)))
+;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Resolve
+;;
+;; - for resolving pointers into absolute coordinates
 
-(s/fdef resolve-coord-span
+(defn end-pos? [path]
+  (when (= :end (path/last path))
+    :end-inner))
+
+(defn- resolve-node-offset [node [path [line+ col+]]]
+  (if (= :end (path/last path))
+    (:to (coords/inner-span node))
+    (let [[line col] (:range node)]
+      (coords/clamp [(+ line+ line)
+                     (cond-> col+
+                             (zero? line+) (+ col))] node))))
+
+(defn resolve
+  "Returns absolute coordinates for pointer."
+  [root-loc [path offset :as pointer]]
+  (let [loc (loc/get-loc root-loc path)
+        node (some-> loc z/node)]
+    (resolve-node-offset node pointer)))
+
+(defn resolve-span
+  "Returns absolute coordinates for span of pointers."
+  [loc {:keys [from to]}]
+  {:from (some->> from (resolve loc))
+   :to (some->> to (resolve loc))})
+
+(s/fdef pointer-span
         :args (s/cat :loc ::loc/loc
                      :span ::coords/span))
 

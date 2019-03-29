@@ -70,6 +70,10 @@
   (assert *deltas* "`selections` only work inside a transaction")
   (:selections @*deltas*))
 
+(defn reset-selections! [selections]
+  {:pre [*deltas*]}
+  (vswap! *deltas* assoc :selections selections))
+
 (defn print-selections []
   #_#_(prn :selected)
       (doseq [s (selections)]

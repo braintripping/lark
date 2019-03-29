@@ -2,7 +2,6 @@
   (:require [lark.structure.pointer :as pointer]
             [lark.structure.delta :as delta]
             [lark.tree.core :as tree]
-            [lark.structure.operation.impl :as impl]
             [lark.structure.coords :as coords]))
 
 (defn- move-path [loc pointer axis distance]
@@ -28,12 +27,18 @@
                     (move-path loc path :y distance)))]
     {:from path}))
 
-(defmethod impl/-operate :cursor/move
-  [_ {:as state
-      :keys [ast]} [axis distance]]
+(defn move [{:as state
+             :keys [ast]} [axis distance]]
   (if (zero? distance)
     state
     (let [loc (tree/zip ast)]
-      (delta/update-spans!
-       #(move-selection loc [axis distance] %))
-      state)))
+      (update state :selections
+              (fn [selections]
+                (->> selections
+                     (mapv #(move-selection loc [axis distance] %))
+                     (distinct)))))))
+
+(defn set-by-coords
+  [state coord-spans]
+  (let [loc (tree/zip (:ast state))]
+    (assoc state :selections (mapv #(pointer/pointer-span loc %) coord-spans))))
