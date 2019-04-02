@@ -1,6 +1,6 @@
 (ns lark.structure.pointer
   (:refer-clojure :exclude [resolve])
-  (:require [fast-zip.core :as z]
+  (:require [lark.fast-zip :as z]
             [lark.structure.coords :as coords]
             [lark.structure.loc :as loc]
             [lark.structure.path :as path]
@@ -93,11 +93,11 @@
                 in-left)
 
             (do (print! "  " 1 (:from node) coords (:range node) (prn-str (emit/string node)))
-                (normalize [(loc/path loc)
+                (normalize [(z/path loc)
                             (coords/offset (:from node) coords)] loc coords))
 
-            (= coords (:to inner-span)) (do (print! "  " 2 :end)
-                                            (normalize [(conj (loc/path loc) :end)
+            (= coords (:to inner-span)) (do (print! "  " 2 :sentinel)
+                                            (normalize [(conj (z/path loc) z/sentinel)
                                                         [0 0]] loc coords))
 
             :else
@@ -156,11 +156,11 @@
 ;; - for resolving pointers into absolute coordinates
 
 (defn end-pos? [path]
-  (when (= :end (path/last path))
+  (when (path/sentinel? path)
     :end-inner))
 
 (defn- resolve-node-offset [node [path [line+ col+]]]
-  (if (= :end (path/last path))
+  (if (path/sentinel? path)
     (:to (coords/inner-span node))
     (let [[line col] (:range node)]
       (coords/clamp [(+ line+ line)
@@ -170,7 +170,7 @@
 (defn resolve
   "Returns absolute coordinates for pointer."
   [root-loc [path offset :as pointer]]
-  (let [loc (loc/get-loc root-loc path)
+  (let [loc (z/nav root-loc path)
         node (some-> loc z/node)]
     (resolve-node-offset node pointer)))
 
@@ -199,56 +199,3 @@
         :args (s/cat :loc ::loc/loc
                      :pointer ::pointer)
         :ret ::coords/coord)
-
-#_(defn pointer---
-    "Returns a pointer (path, offset) for a position within a loc.
-
-    position:    {... :line, :column}
-    cursor-path: [loc-path offset]
-    offset:      [line column]"
-    [loc coords]
-
-    (let [node (.-node loc)
-          tag (.-tag node)
-          coords (coords/clamp coords node)
-          inner-span (coords/inner-span node)
-          terminal? (n/terminal? node)
-
-          in-left (coords/< coords (:from inner-span))
-          on-left (coords/= coords (:from node))
-          in-right (coords/within-right-edge? node coords)
-          right-edge? (and (coords/= coords (:to node))
-                           (second (rd/edges tag))
-                           (not (z/right loc)))
-          no-children (empty? (:children node))]
-      (print! "\n\n"
-              (:tag node) [(:line node) (:column node)] (emit/string node) coords (mapv :tag (:children node)))
-      (when terminal? (print! "  " :terminal))
-      (when in-left (print! "  " :in-left))
-      (when right-edge? (print! "  " :right-edge))
-
-      (cond (or terminal?
-                in-left
-                (and no-children
-                     (or (not right-edge?)
-                         on-left)))
-
-            (do (print! 1 (:from node) coords (:range node) (prn-str (emit/string node)))
-                [(loc/path loc)
-                 (coords/offset (:from node) coords)])
-
-            ;; different 'right' priority.
-            ;; only shortcut to `right` here if we are on the outer edge + no z/right?
-            (or right-edge?
-                no-children) (do (print! 2 :end)            ;; WRONG
-                                 [(loc/path loc)
-                                  (sticky-end node inner-span coords)])
-
-            :else
-            (let [child (->> (nav/child-locs loc)
-                             (take-while (comp #(coords/<= (:from %) coords)
-                                               z/node))
-                             (last))]
-              (print! :child child)
-              (assert child "must find child")
-              (recur child coords)))))

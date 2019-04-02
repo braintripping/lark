@@ -11,6 +11,8 @@
             [clojure.string :as str]
             [lark.structure.pointer :as pointer]))
 
+(def view-all? true)
+
 (jss/classes! {"@global"
                {".hidden" {:position "absolute"
                            :left -9999999}
@@ -149,7 +151,7 @@
                                                                             (= sample selected-sample))
                                                                   :let [{:as operated
                                                                          :keys [state-after]} (samples/operate-on-sample op-key op-args sample expected)]
-                                                                  :when (:error state-after)]
+                                                                  :when (or view-all? (:error state-after))]
                                                               operated))]
                                    :when (seq sample-states)]
                                {:op-args op-args

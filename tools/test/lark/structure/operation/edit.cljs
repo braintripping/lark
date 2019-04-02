@@ -1,6 +1,6 @@
 (ns lark.structure.operation.edit
   (:refer-clojure :exclude [replace])
-  (:require [fast-zip.core :as z]
+  (:require [lark.fast-zip :as z]
             [lark.tree.core :as tree]
             [lark.structure.delta :as delta]
             [lark.structure.operation.impl.replace :as replace]

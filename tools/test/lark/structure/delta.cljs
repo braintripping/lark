@@ -6,12 +6,13 @@
             [lark.structure.coords :as coords]
             [cljs.spec.alpha :as s]
             [cljs.pprint :as pp]
-            [lark.structure.path :as path])
+            [lark.structure.path :as path]
+            [lark.fast-zip :as z])
   (:require-macros [lark.structure.delta]))
 
 (def ^:dynamic *deltas* nil)
 
-(defn tracked* [pointer-span]
+(defn- tracked* [pointer-span]
   (let [a (atom nil :validator #(s/assert :lark.structure.pointer/span %))]
     (reset! a pointer-span)
     a))
@@ -25,7 +26,8 @@
 (defn update-span-pointers [f span]
   (u/update-some-keys span [:from :to] (fn [span] (f span))))
 
-(defn update-pointers! [pointerf]
+(defn update-pointers! [pointerf source]
+  (print :update-pointers source)
   (let [{:as deltas
          :keys [selections
                 tracked]} @*deltas*
@@ -35,21 +37,12 @@
     (doseq [span tracked]
       (swap! span update-span))))
 
-(defn update-paths! [pathf]
+(defn update-paths! [pathf source]
   (update-pointers! (fn [[path offset]]
-                      [(pathf path) offset])))
-
-(defn update-spans! [spanf]
-  (let [{:as deltas
-         :keys [selections
-                tracked]} @*deltas*]
-    (doseq [span selections]
-      (swap! span spanf))
-    (doseq [span tracked]
-      (swap! span spanf))))
+                      [(pathf path) offset]) source))
 
 (defn add-offset!
-  [[path from-coords] offset]
+  [[path from-coords] offset source]
   #_(prn :add-offset! path from-coords offset)
   (update-pointers! (fn [pointer]
                       (let [[p coords :as pointer] pointer]
@@ -60,7 +53,7 @@
                             #_(print "  " [p coords])
                             #_(print "  " after "\n\n")
                             after)
-                          pointer)))))
+                          pointer))) [source :add-offset!]))
 
 (s/fdef add-offset!
         :args (s/cat :pointer :lark.structure.pointer/pointer
@@ -75,9 +68,9 @@
   (vswap! *deltas* assoc :selections selections))
 
 (defn print-selections []
-  #_#_(prn :selected)
-      (doseq [s (selections)]
-        (print "  " @s)))
+  (print "  Selected:")
+  (doseq [s (selections)]
+    (print "    " @s)))
 
 (defn pointer-offset
   [offsets [path start-coords]]
@@ -90,25 +83,38 @@
   (u/update-some-keys span [:from :to]
                       (fn [[path offset]] [(f path) offset])))
 
-(defn shift-sibling [depth i added path]
-  (let [prior-sibling? (and (>= (count path) depth)
-                            (>= (nth path (dec depth)) i))]
-    (if prior-sibling?
-      (path/update-nth path (dec depth) #(max 0 (+ % added)))
-      path)))
+(defn shift-sibling
+  ([fpath tpath added]
+   (shift-sibling (count fpath)
+                  (path/last fpath)
+                  added
+                  tpath))
+  ([depth i added path]
+   (let [sibling-after? (and (>= (count path) depth)
+                             (>= (nth path (dec depth)) i))]
+     (if sibling-after?
+       (path/update-nth path (dec depth) #(max 0 (+ % added)))
+       path))))
 
-(defn shift! [path added]
+(defn shift-children-up! [parent source]
+  (update-paths!
+   (fn [p]
+     (cond-> p
+             (path/= (path/parent p) parent) (path/assoc-last z/sentinel)))
+   [:up-children! source]))
+
+(defn shift! [path added source]
   (let [depth (count path)
         i (peek path)]
     (update-paths!
      (fn [p]
-       (shift-sibling depth i added p)))))
+       (shift-sibling depth i added p)) [source :shift!])))
 
-(defn move-offsets! [from-path to-path start-offset]
+(defn move-offsets! [from-path to-path start-offset source]
   (update-pointers! (fn [[path offset :as pointer]]
                       (if (= path from-path)
                         [to-path (coords/+ offset start-offset)]
-                        pointer))))
+                        pointer)) [source :move-offsets!]))
 
 (defn move-path [from-path to-path after-child path]
   (if (path/starts-with? path from-path)
@@ -119,8 +125,8 @@
           (path/update-last #(+ % after-child))))
     path))
 
-(defn move-coll-path! [from to after]
-  (update-paths! #(move-path from to after %)))
+(defn move-coll-path! [from to after source]
+  (update-paths! #(move-path from to after %) [source :move-coll-path!]))
 
 (s/def ::shift number?)
 

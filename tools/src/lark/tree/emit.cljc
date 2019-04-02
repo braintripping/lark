@@ -1,6 +1,6 @@
 (ns lark.tree.emit
   (:refer-clojure :exclude [*ns*])
-  (:require [fast-zip.core :as z]
+  (:require [lark.fast-zip :as z]
             [lark.tree.fn :refer [fn-walk]]
             [clojure.string :as str]
             [lark.tree.reader :as rd]

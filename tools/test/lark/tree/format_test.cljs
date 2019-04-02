@@ -1,7 +1,7 @@
 (ns lark.tree.format-test
   (:require [lark.tree.core :as tree]
             [cljs.test :refer [deftest is are testing]]
-            [fast-zip.core :as z]
+            [lark.fast-zip :as z]
             [lark.tree.emit :as emit]
             [lark.tree.format :as format]
             [lark.tree.nav :as nav]
@@ -199,7 +199,7 @@
                                          (tree/ast)) 5)
               (simple-benchmark [] (-> (parse/ast s)
                                        :string) 5)))
-        (let [ast (parse/ast* s)]
+        (let [ast (parse/ast s)]
           (.profile js/console "new formatting")
           (simple-benchmark [] (-> (emit/materialize ast {:format true})
                                    :string) 10)

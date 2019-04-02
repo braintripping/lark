@@ -17,4 +17,9 @@
                  :compiler-options {:static-fns false}
                  :release {:compiler-options {:optimizations :simple}}
                  :devtools {:http-port 8021
-                            :http-root "public/test"}}}}
+                            :http-root "public/test"}}
+          :bench {:target           :node-test
+                  :output-to        "public/bench.js"
+                  :ns-regexp        "-bench$"
+                  :autorun          true
+                  :compiler-options {:optimizations :advanced}}}}

@@ -5,7 +5,7 @@
             [lark.tree.core :as tree]
             [chia.util :as u]
             [lark.structure.pointer :as pointer]
-            [fast-zip.core :as z]))
+            [lark.fast-zip :as z]))
 
 (defn with-args [args & pairs]
   (let [triples (partition 2 (interleave (partition 2 pairs) (if (vector? args) (repeat args) args)))]
@@ -13,7 +13,7 @@
       [in {args out}])))
 
 (def samples
-  {:identity (->> ["^|js x"
+  {#_#_:identity (->> ["^|js x"
                    "^j|s x"
                    "< [] >"
                    "#<{>}"
@@ -26,6 +26,10 @@
                    ]
                   (mapcat (fn [sample] [sample {[] sample}])))
    :edit/replace [(with-args ["Y"]
+                    "< d>" "Y|"
+                    "  |  " "  Y|  "
+
+
                     "a<b>c" "aY|c"
                     "a<b c>d" "aY|d"
                     "[a<b] [c>d]" "[aY|d]"
@@ -39,8 +43,15 @@
                     "[<()x>]" "[Y|]"
                     "[<x()>]" "[Y|]"
                     "<a []>" "Y|"
-                    "<[]>" "Y|"
-                    )
+                    "<[]>" "Y|")
+
+                  (with-args ["("]
+                    "ab|cd" "ab(|cd")
+                  (with-args [""]
+                    "(< [] >)" "(|)"
+                    "(<a>)" "(|)")
+                  (with-args [" "]
+                    "( x|)" "( x |)")
 
                   "a|" {["x"] "ax|"
                         ["\na"] "a\na|"
@@ -63,13 +74,13 @@
                     "|@a" "x|@a"
                     " \"| " " \"x| "
 
-                    "(()|)" "(()x|)"               ;; offset from right
+                    "(()|)" "(()x|)"                        ;; offset from right
 
                     "@|a" "@x|a"
                     "^j|s[]" "^jx|s[]"
                     "a<a>a" "ax|a"
                     "<a>a<a>" "x|ax|")]
-   :selection/move [
+   #_#_:selection/move [
                     (with-args (for [i (range 6)]
                                  [:x i])
                       "|([])" "|([])"
@@ -96,35 +107,35 @@
                     "|[ ] " {[:x 1] "[| ] "
                              [:x -1] "|[ ] "
                              [:y 1] "[ ] |"
-                             [:y -1] "|[ ] "}                  ;{:+ch " insert node"}
+                             [:y -1] "|[ ] "}               ;{:+ch " insert node"}
                     "[ ]|" {[:x 1] "[ ]|"
                             [:x -1] "[ |]"
                             [:y 1] "[ ]|"
-                            [:y -1] "|[ ]"}                    ;{:+ch " insert node"}
+                            [:y -1] "|[ ]"}                 ;{:+ch " insert node"}
                     "[|]" {[:x 1] "[]|"
                            [:x -1] "|[]"
                            [:y 1] "[]|"
-                           [:y -1] "|[]"}                      ;{:+ch " insert node"}
+                           [:y -1] "|[]"}                   ;{:+ch " insert node"}
                     "[| ] " {[:x 1] "[ |] "
                              [:x -1] "|[ ] "
                              [:y 1] "[ ] |"
-                             [:y -1] "|[ ] "}                  ;{:+ch " right+"}
+                             [:y -1] "|[ ] "}               ;{:+ch " right+"}
                     "[ |] " {[:x 1] "[ ]| "
                              [:x -1] "[| ] "
                              [:y 1] "[ ] |"
-                             [:y -1] "|[ ] "}                  ;{:+ch " left+"}
+                             [:y -1] "|[ ] "}               ;{:+ch " left+"}
                     "#|{}" {[:x 1] "#{|}"
                             [:x -1] "|#{}"
                             [:y 1] "#{}|"
-                            [:y -1] "|#{}"}                    ;{:+ch " ? eg _, :kw, ::, @"}
+                            [:y -1] "|#{}"}                 ;{:+ch " ? eg _, :kw, ::, @"}
                     "|abc " {[:x 1] "a|bc "
                              [:x -1] "|abc "
                              [:y 1] "abc |"
-                             [:y -1] "|abc "}                  ;{:+ch " +right"}
+                             [:y -1] "|abc "}               ;{:+ch " +right"}
                     "a|bc " {[:x 1] "ab|c "
                              [:x -1] "|abc "
                              [:y 1] "abc |"
-                             [:y -1] "|abc "}                  ;{:+ch " +loc"}
+                             [:y -1] "|abc "}               ;{:+ch " +loc"}
                     "abc| " {[:x 1] "abc |"
                              [:x -1] "ab|c "
                              [:y 1] "abc |"
@@ -147,7 +158,7 @@
         {:as state-after
          :keys [error
                 ast
-                selections]} (operation/operate op-key state-before op-args)
+                selections]} (operation/operate state-before op-key op-args)
         zip (tree/zip ast)
         sample-after (some-> ast
                              (emit/string)

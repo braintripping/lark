@@ -1,6 +1,6 @@
 (ns lark.tree.node
   (:require [lark.tree.reader :as rd]
-            [fast-zip.core :as z]
+            [lark.fast-zip :as z]
             [chia.util.perf :as perf]))
 
 (defn comment?

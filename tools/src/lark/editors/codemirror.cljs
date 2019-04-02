@@ -1,7 +1,7 @@
 (ns lark.editors.codemirror
   (:require
    ["codemirror" :as CM]
-   [fast-zip.core :as z]
+   [lark.fast-zip :as z]
    [goog.events :as events]
    [lark.tree.core :as tree]
    [goog.dom :as gdom]

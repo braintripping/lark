@@ -3,7 +3,7 @@
             [lark.tree.reader :as rd]
             [cljs.spec.alpha :as s]
             [spell-spec.alpha :as ss]
-            [fast-zip.core :as z]))
+            [lark.fast-zip :as z]))
 
 (s/def ::line number?)
 (s/def ::column number?)

@@ -5,7 +5,7 @@
             [lark.tree.util :as util]
             [lark.tree.cursor :as cursor]
             [lark.editors.codemirror :as cm]
-            [fast-zip.core :as z]
+            [lark.fast-zip :as z]
             [goog.dom :as dom]
             [goog.dom.Range :as Range]
             [clojure.string :as string]

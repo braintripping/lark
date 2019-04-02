@@ -2,7 +2,7 @@
   (:require [lark.cards.test-utils :as utils]
             [lark.editors.codemirror :as cm]
             [lark.tree.core :as tree]
-            [fast-zip.core :as z]
+            [lark.fast-zip :as z]
             [lark.tree.cursor :as cursor]
             [cljs.test :refer [deftest is are]]
             [lark.tree.nav :as nav]

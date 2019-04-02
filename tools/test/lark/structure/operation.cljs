@@ -9,7 +9,7 @@
 
 (defonce registry (atom {}))
 
-(defn operate [op state & args]
+(defn operate [state op & args]
   (let [operation (@registry op)
         state (apply operation state args)]
     (assert (instance? rd/Node (:ast state))

@@ -3,7 +3,7 @@
             [lark.tree.emit :as emit]
             [lark.tree.node :as n]
             [lark.tree.format :as format]
-            [fast-zip.core :as z]))
+            [lark.fast-zip :as z]))
 
 ;; Parse
 
@@ -28,12 +28,12 @@
 
 (defn format-string [s]
   {:pre [(string? s)]}
-  (-> (parse/ast* s)
+  (-> (parse/ast s)
       (emit/materialize {:format true})
       :string))
 
 (defn formatted-ast [s]
-  (-> (parse/ast* s)
+  (-> (parse/ast s)
       (emit/materialize {:format true})))
 
 #_(do

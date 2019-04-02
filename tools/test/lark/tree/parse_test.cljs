@@ -1,7 +1,7 @@
 (ns lark.tree.parse-test
   (:require [lark.tree.parse :as parse]
             [lark.tree.core :as tree]
-            [fast-zip.core :as z]
+            [lark.fast-zip :as z]
             [lark.tree.emit :as emit]
             [cljs.test :refer [deftest is are testing]]
             [lark.tree.reader :as rd]

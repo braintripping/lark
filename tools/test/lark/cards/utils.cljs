@@ -3,7 +3,7 @@
             [lark.tree.node :as node]
             [lark.tree.range :as range]
             [lark.tree.node :as n]
-            [fast-zip.core :as z]
+            [lark.fast-zip :as z]
             [lark.tree.nav :as nav]
             [chia.jss :as jss]
             [chia.view :as v]))

@@ -1,6 +1,6 @@
 (ns lark.tree.cursor
   (:require [lark.tree.nav :as nav]
-            [fast-zip.core :as z]
+            [lark.fast-zip :as z]
             [lark.tree.node :as n]
             [lark.tree.range :as range]
             [lark.tree.util :as util]))

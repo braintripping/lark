@@ -1,6 +1,6 @@
 (ns lark.tree.nav
   (:refer-clojure :exclude [range])
-  (:require [fast-zip.core :as z]
+  (:require [lark.fast-zip :as z]
             [lark.tree.node :as n]
             [lark.tree.reader :as rd]
             [lark.tree.range :as range]

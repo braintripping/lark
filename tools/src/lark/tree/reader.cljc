@@ -1,62 +1,46 @@
 (ns lark.tree.reader
-  (:refer-clojure :exclude [peek next])
   (:require
-   [lark.tree.util :as util]
-   [clojure.pprint :as pp]
+   [clojure.tools.reader.reader-types :as r]
    [chia.util.perf :as perf]
-   #?@(:cljs [[cljs.tools.reader.reader-types :as r]
-              [applied-science.js-interop :as j]]
-       :clj  [[clojure.tools.reader.reader-types :as r]])))
+   #?(:cljs [applied-science.js-interop :as j])))
 
 (def ^:dynamic *invalid-nodes* nil)
 (def ^:dynamic *active-cursor-line* nil)
+(def ^:dynamic *delimiter* (list))
 
 (defn active-cursor-line? [line]
   (identical? line *active-cursor-line*))
-
-(def ^:dynamic *delimiter* (list))
-
-(def peek r/peek-char)
-
-(defn current-offset [indexing-pushback-reader]
-  (let [pushback-reader (.-rdr indexing-pushback-reader)
-        indexing-reader (.-rdr pushback-reader)
-        pushback (- (.-buf_len pushback-reader)
-                    (.-buf_pos pushback-reader))]
-    (- (.-s_pos indexing-reader)
-       pushback)))
-
-(defn ignore-prefix? [tag]
-  (perf/keyword-in? [:meta] tag))
 
 (defn edges [tag]
   (case tag
     :list [\( \)]
     :vector [\[ \]]
-    :meta ["^"]
-
     :map [\{ \}]
-    :comment [";"]
-    :deref ["@"]
-    :fn ["#"]
-    :quote ["'"]
-    :reader-meta ["#^"]
-    :reader-macro ["#"]
-    :regex ["#"]
-    :set ["#"]
     :string [\" \"]
+
+    :meta ["^"]
+    :comment [";"]
     :syntax-quote ["`"]
     :unquote ["~"]
     :unquote-splicing ["~@"]
+    :quote ["'"]
+    :deref ["@"]
+
+    (:fn
+     :reader-macro
+     :regex
+     :set
+     :data-literal) ["#"]
+
+    :reader-meta ["#^"]
     :uneval ["#_"]
     :var ["#'"]
     :reader-conditional ["#?"]
     :reader-conditional-splice ["#?@"]
     :selection [\‹ \›]
-    :data-literal ["#"]
     nil))
 
-(defn whitespace-tag? [tag]
+(defn ^boolean whitespace-tag? [tag]
   (perf/keyword-in?
    [:space
     :newline
@@ -69,9 +53,31 @@
     :selection/end]
    tag))
 
+(defn indexing-reader
+  "Create reader for strings."
+  [s]
+  (r/indexing-push-back-reader
+   (r/string-push-back-reader s 10)))
+
+(defn current-offset [indexing-pushback-reader]
+  (let [pushback-reader (.-rdr indexing-pushback-reader)
+        indexing-reader (.-rdr pushback-reader)
+        pushback (- (.-buf_len pushback-reader)
+                    (.-buf_pos pushback-reader))]
+    (- (.-s_pos indexing-reader)
+       pushback)))
+
+(defn indexing-reader-source [reader]
+  (.. reader -rdr -rdr -s))
+
+(defn ^boolean ignore-prefix? [tag]
+  (perf/unchecked-keyword-identical? :meta tag))
+
 (defn throw-reader
   "Throw reader exception, including line/column."
   [reader fmt & data]
+
+  ;; ? should this be `dec` line + col?
   (let [c (.-column reader)
         l (.-line reader)]
     (throw
@@ -84,52 +90,20 @@
   "Read while the chars fulfill the given condition. Does not consume the unmatching char."
   [reader pred]
   (loop [out ""]
-    (let [c (r/read-char reader)
-          passes? (pred c)]
-      (cond (nil? c) (if passes?
-                       (throw-reader reader "Unexpected EOF.")
-                       out)
-            passes? (recur (perf/str out c))
-            :else (do
-                    (r/unread reader c)
-                    out)))))
+    (if-some [c (r/read-char reader)]
+      (if (pred c)
+        (recur (perf/str out c))
+        (do (r/unread reader c)
+            out))
+      out)))
 
 (defn read-until
   "Read until a char fulfills the given condition. Does not consume the matching char."
   [reader p?]
   (read-while reader (complement p?)))
 
-(defn next
-  "Read next char."
-  [reader]
-  (r/read-char reader))
-
-(defn ignore
-  "Ignore the next character."
-  [reader]
-  (r/read-char reader))
-
-(defn unread
-  "Unreads a char. Puts the char back on the reader."
-  [reader ch]
-  (r/unread reader ch))
-
-(defn position
-  "Returns 0-indexed vector of [line, column] for current reader position."
-  [reader]
-  [(dec (.-line reader))
-   (dec (.-column reader))])
-
-;; TODO
-;; :value => (first children)
-;; first, last, rest, etc. -- operate on children
-;; seq -- returns children
-
-(defprotocol IMutate
-  ;; mutates range of node -- for internal parser use
-  (assoc-range! [this position])
-  (assoc-string! [this string])
-  (assoc-children! [this children]))
+(defn line [reader] (dec (.-line reader)))
+(defn column [reader] (dec (.-column reader)))
 
 (defprotocol IAppend
   (append [this x]))
@@ -146,19 +120,6 @@
   IAppend
   (append [coll o]
     (Node. tag options range value (conj children o) nil))
-
-  ;; ------------- Position information stored via `meta` --------------
-
-  IMutate
-  (assoc-range! [this r]
-    (set! range r)
-    this)
-  (assoc-string! [this s]
-    (set! string s)
-    this)
-  (assoc-children! [this c]
-    (set! children c)
-    this)
 
   ;; ------------- Equality --------------
 
@@ -218,16 +179,17 @@
       :children (set! children val)
       :range (set! range val)
       :string (set! string val)
-      :options (set! options val))
+      :options (set! options val)
+      (set! options (assoc options k val)))
     this)
 
-  ICollection
-  (-conj [coll entry]
-    (if (vector? entry)
-      (-assoc coll (-nth entry 0) (-nth entry 1))
-      (reduce -conj
-              coll
-              entry)))
+  #_#_ICollection
+      (-conj [coll entry]
+             (if (vector? entry)
+               (-assoc coll (-nth entry 0) (-nth entry 1))
+               (reduce -conj
+                       coll
+                       entry)))
 
   ;; `get` supports direct access to tag, value, and positional elements
 
@@ -265,39 +227,32 @@
       (-write writer
               (str "🥚" (name tag))
               #_(str (cond-> [(str "🥚" (name tag))]
-                           range (conj range)
-                           (seq options) (conj options)
-                           (not (seq children)) (conj (subs (str value) 0 10))
-                           children (conj (str "…" (map :tag children) "…"))))))))
+                             range (conj range)
+                             (seq options) (conj options)
+                             (not (seq children)) (conj (subs (str value) 0 10))
+                             children (conj (str "…" (map :tag children) "…"))))))))
 
 (defn delimiter-error [tag reader]
-  (let [[line col] (position reader)]
-    (Node. :error {:tag tag
-                   :expected (first *delimiter*)} [line
-                                                   col
-                                                   line
-                                                   (inc col)] nil nil nil)))
-
-(defn current-pos [reader]
-  [(dec (.-line reader))
-   (dec (.-column reader))])
+  (let [line (line reader)
+        col (column reader)]
+    (Node. :error
+           {:tag tag
+            :expected (first *delimiter*)}
+           [line col line (inc col)]
+           nil nil nil)))
 
 (defn read-with-position
   "Use the given function to read value, then attach row/col metadata."
   [reader read-fn]
-  (let [start-line (dec (.-line reader))
-        start-column (dec (.-column reader))
+  (let [start-line (line reader)
+        start-column (column reader)
         start-offset (current-offset reader)]
     (when-let [node (read-fn reader)]
-      (assoc-range! node
-                    [start-line
-                     start-column
-
-                     (dec (.-line reader))
-                     (dec (.-column reader))
-
-                     start-offset
-                     (current-offset reader)]))))
+      (let [offset (current-offset reader)
+            range [start-line start-column (line reader) (column reader) start-offset offset]
+            source (indexing-reader-source reader)]
+        #?(:cljs (j/assoc! node .-range range .-string source)
+           :clj  (assoc! node :range range :string source))))))
 
 (defn report-invalid! [node]
   (let [node (assoc node :invalid? true)]
@@ -310,16 +265,13 @@
   ([tag value position]
    (report-invalid!
     (->Node :token {:invalid? true
-                    :info {:tag tag}} position value nil nil))))
+                    :info {:tag tag}} position value nil value))))
 
 (defn Splice
   ([children]
    (->Node :splice nil nil nil children nil))
   ([node children]
    (Splice (into [node] children))))
-
-(defn CollectionNode [tag nodes]
-  (->Node tag nil nil nil nodes nil))
 
 (defn ValueNode [tag value]
   (->Node tag nil nil value nil nil))
@@ -330,8 +282,8 @@
 (defn StartingNode [reader tag]
   (->Node tag
           nil
-          [(dec (.-line reader))
-           (-> (dec (.-column reader))
+          [(line reader)
+           (-> (column reader)
                (- (count (first (edges tag)))))
            nil
            nil
@@ -364,8 +316,8 @@
                        (conj taken next-item))))))))
 
 (defn take-children
-  [reader {:keys [:read-fn
-                  :count-pred]
+  [reader {:keys [read-fn
+                  count-pred]
            take-n :take-n}]
   ;; returns `child-values, remaining-values, valid?`
   (loop [i 0
@@ -392,7 +344,7 @@
                 (if
                  (contains? (set *delimiter*) value)        ;; can match prev
                   (do
-                    (unread reader value)
+                    (r/unread reader value)
                     [false out nil])
                   (recur next-i (conj out (report-invalid! next-node))))
 
@@ -406,7 +358,7 @@
 
                 :matched-delimiter
                 (if (and take-n (not (identical? take-n i)))
-                  (do (unread reader value)
+                  (do (r/unread reader value)
                       [false out nil])
                   [true out nil])
 
@@ -415,7 +367,7 @@
 (defn- invalid-exit [coll-node reader out]
   (let [coll-tag (.-tag coll-node)]
     (if (perf/unchecked-keyword-identical? :base coll-tag)
-      (assoc-children! coll-node out)
+      (assoc! coll-node :children out)
       (Splice (let [[left right] (edges coll-tag)
                     width (count left)]
                 (report-invalid!
@@ -431,7 +383,7 @@
                          (current-offset reader)]
                         left
                         nil
-                        nil)))
+                        left)))
               out))))
 
 (defn- valid-exit [coll-node out]
@@ -465,7 +417,7 @@
                 (if
                  (contains? (set *delimiter*) value)        ;; can match prev
                   (do
-                    (unread reader value)
+                    (r/unread reader value)
                     (invalid-exit coll-node reader out))
                   (recur next-i (conj out (report-invalid! next-node))))
 
@@ -483,7 +435,7 @@
 
                 :matched-delimiter
                 (if (and take-n (not (identical? take-n i)))
-                  (do (unread reader value)
+                  (do (r/unread reader value)
                       (invalid-exit coll-node reader out))
                   (valid-exit coll-node out))
 
@@ -497,39 +449,26 @@
                    (StartingNode reader tag)
                    {:read-fn read-fn})))
 
-(defn read-string-data
-  [node reader]
-  (ignore reader)
-  (loop [escape? false
-         out ""]
-    (if-let [c (r/read-char reader)]
-      (cond (and (not escape?) (identical? c \"))
-            (doto node (-> .-value
-                           (set! out)))
-            :else
-            (recur (and (not escape?) (identical? c \\))
-                   (perf/str out c)))
-      (report-invalid!
-       (assoc! node :tag :token
-               :options {:tag (.-tag node)}
-               :value (str \" out))))))
-
 (def non-breaking-space \u00A0)
 
-(defn newline?
+(defn ^boolean newline?
   [ch]
   (perf/identical-in? [\newline
                        \return]
                       ch))
 
-(defn space?
+(defn ^boolean space?
   [ch]
   (perf/identical-in? [\space
                        \tab
                        non-breaking-space]
                       ch))
 
-(defn whitespace?
+(defn ^boolean comma?
+  [ch]
+  (identical? "," ch))
+
+(defn ^boolean whitespace?
   [ch]
   (perf/identical-in? [\space
                        \,
@@ -539,22 +478,22 @@
                        \return]
                       ch))
 
-(defn close-bracket? [ch]
+(defn ^boolean close-bracket? [ch]
   (perf/identical-in? [\) \] \}] ch))
 
-(defn open-bracket? [ch]
+(defn ^boolean open-bracket? [ch]
   (perf/identical-in? [\( \[ \{] ch))
 
-(defn brace? [ch]
+(defn ^boolean brace? [ch]
   (or (close-bracket? ch)
       (open-bracket? ch)
       (identical? "\"" ch)))
 
-(defn prefix-boundary? [ch]
+(defn ^boolean prefix-boundary? [ch]
   (or (perf/keyword-in? [\; \: \' \@ \^ \` \~ \\] ch)
       (identical? ch nil)))
 
-(defn boundary? [ch]
+(defn ^boolean boundary? [ch]
   (or (whitespace? ch)
       (brace? ch)
       (prefix-boundary? ch)))

@@ -9,6 +9,7 @@
     height: auto;
     color: black;
     direction: ltr;
+
 }
 
 .CodeMirror {
@@ -249,6 +250,8 @@ div.CodeMirror span.CodeMirror-nonmatchingbracket {
     /*height: 100%;*/
     outline: none; /* Prevent dragging from highlighting the element */
     position: relative;
+    padding-left: 1px;
+    padding-right: 1px;
 }
 
 .CodeMirror-sizer {

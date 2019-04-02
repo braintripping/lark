@@ -1,6 +1,5 @@
 (ns lark.structure.operation.select
   (:require [lark.structure.pointer :as pointer]
-            [lark.structure.delta :as delta]
             [lark.tree.core :as tree]
             [lark.structure.coords :as coords]))
 

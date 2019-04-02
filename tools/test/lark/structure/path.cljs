@@ -3,7 +3,8 @@
   (:refer-clojure :exclude [contains? resolve compare = < > >= <= last])
   (:require [clojure.core :as core]
             [clojure.spec.alpha :as s]
-            [goog.array :as garray]))
+            [goog.array :as garray]
+            [lark.fast-zip :as z]))
 
 ;;;;;;;;;;;;;;;;;
 ;;
@@ -39,12 +40,15 @@
         [(subvec path1 i)
          (subvec path2 i)]))))
 
+(defn sentinel? [path]
+  (core/= z/sentinel (last path)))
+
 ;;;;;;;;;;;;;;;;;
 ;;
 ;; Left-to-right comparison
 
-(defn- ^number compare-segment
-  "Comparator for segments, handles :end values."
+(defn- ^number compare-index
+  "Comparator for segments, handles sentinel values."
   [x y]
   (cond
     (identical? x y) 0
@@ -55,11 +59,11 @@
 
     (number? x) (if (number? y)
                   (garray/defaultCompare x y)
-                  (if (keyword-identical? y :end)
+                  (if (keyword-identical? y z/sentinel)
                     -1
                     (throw (js/Error. (str "Cannot compare " x " to " y)))))
 
-    (keyword-identical? x :end) (if (keyword-identical? y :end) 0 1)
+    (keyword-identical? x z/sentinel) (if (keyword-identical? y z/sentinel) 0 1)
     :else
     (throw (js/Error. (str "Cannot compare " x " to " y)))))
 
@@ -75,8 +79,8 @@
               has-y ^boolean (.hasNext iter2)]
           (if
            (or has-x has-y)
-            (let [cmp (compare-segment (when has-x (.next iter1))
-                                       (when has-y (.next iter2)))]
+            (let [cmp (compare-index (when has-x (.next iter1))
+                                     (when has-y (.next iter2)))]
               (if (zero? cmp)
                 (recur)
                 cmp))
@@ -127,9 +131,9 @@
 ;; Updating
 
 (defn- update-segment
-  "Update segment, ignoring :end segments"
+  "Update segment, ignoring sentinel segments"
   [segment f & args]
-  (if (keyword-identical? segment :end)
+  (if (keyword-identical? segment z/sentinel)
     segment
     (apply f segment args)))
 
@@ -139,9 +143,11 @@
 (defn update-last [path f]
   (update-nth path (dec (count path)) f))
 
+(defn assoc-last [path v]
+  (assoc path (dec (count path)) v))
+
 (defn append [path x]
-  (assert (not (keyword-identical? :end (core/last path)))
-          "Cannot append to an :end path")
+  (assert (not (sentinel? path)) "Cannot append to a sentinel path")
   (conj path x))
 
 (defn move-path [from-p to-p child-offset path]
@@ -154,9 +160,10 @@
 
 
 
+
 (s/def ::segment (s/or :number (s/and int?
                                       (complement neg?))
-                       :end #{:end}))
+                       :sentinel #{z/sentinel}))
 
 (s/def ::path (s/and vector?
                      (s/coll-of ::segment)))
@@ -169,9 +176,6 @@
 (s/fdef ancestor?
         :args (s/coll-of ::path)
         :ret boolean?)
-
-(s/fdef drop-common
-        :args (s/coll-of ::path))
 
 (s/fdef update-last
         :args (s/cat :path ::path
@@ -190,13 +194,13 @@
  (let [paths1 [[0 1 0 3]
                [0 0 1 4]
                [0 0 4]
-               [0 1 0 :end]
+               [0 1 0 z/sentinel]
                [1]
                [1 0 10 3]
                [1 1]
                [1 1 1]
-               [1 :end]
-               [:end]
+               [1 z/sentinel]
+               [z/sentinel]
                []
                []
                []]
